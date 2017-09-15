@@ -1,0 +1,38 @@
+name:          reporter-simple
+version:       0.1.0.0
+build-type:    Simple
+cabal-version: >= 1.25
+
+library
+    build-depends:
+        aeson
+      , base
+      , bytestring
+      , http-types
+      , lens
+      , opentracing-types
+      , reporter-config-simple
+      , text
+      , tracer-sig
+      , tracer-simple
+
+    exposed-modules:
+        OpenTracing.Reporter.Simple
+
+    reexported-modules:
+        OpenTracing.Reporter.Simple as OpenTracing.Reporter
+      , OpenTracing.Reporter.Config.Simple as OpenTracing.Reporter.Config
+
+    ghc-options:      -Wall -funbox-small-strict-fields
+    default-language: Haskell2010
+
+library reporter-config-simple
+    build-depends:
+        base
+      , opentracing-types
+
+    exposed-modules:
+        OpenTracing.Reporter.Config.Simple
+
+    ghc-options:      -Wall
+    default-language: Haskell2010

@@ -1,0 +1,20 @@
+name:          opentracing-simple
+version:       0.1.0.0
+build-type:    Simple
+cabal-version: >= 2
+
+executable opentracing-simple
+    main-is: Main.hs
+
+    build-depends:
+        base
+      , lens
+
+      , opentracing-indef
+      , reporter-sig
+      , reporter-simple
+      , tracer-sig
+      , tracer-simple
+
+    ghc-options:      -Wall -O
+    default-language: Haskell2010
