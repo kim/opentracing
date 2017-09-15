@@ -2,7 +2,6 @@ module OpenTracing
     ( module OpenTracing.Reporter
     , module OpenTracing.Reporter.Config
     , module OpenTracing.Tracer
-    , module OpenTracing.Tracer.Class
     , module OpenTracing.Types
 
     , traceStartSafe
@@ -18,7 +17,6 @@ import           Data.Text                   (Text)
 import           OpenTracing.Reporter
 import           OpenTracing.Reporter.Config
 import           OpenTracing.Tracer
-import           OpenTracing.Tracer.Class
 import           OpenTracing.Types           hiding (traceFinish)
 import qualified OpenTracing.Types
 
