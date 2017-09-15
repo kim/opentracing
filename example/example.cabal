@@ -1,9 +1,9 @@
-name:          opentracing-simple
+name:          example
 version:       0.1.0.0
 build-type:    Simple
 cabal-version: >= 2
 
-executable opentracing-simple
+executable opentracing-example
     main-is: Main.hs
 
     build-depends:
