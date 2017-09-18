@@ -9,6 +9,7 @@ executable opentracing-example
     build-depends:
         base
       , lens
+      , mtl
 
       , opentracing-indef
       , reporter-sig

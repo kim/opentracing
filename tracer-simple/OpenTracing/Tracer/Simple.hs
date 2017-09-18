@@ -36,25 +36,26 @@ module OpenTracing.Tracer.Simple
 where
 
 import           Codec.Serialise
-import           Control.Lens                       hiding (Context, (.=))
+import           Control.Lens                hiding (Context, (.=))
+import           Control.Monad.Catch
 import           Control.Monad.Reader
 import           Data.Aeson
 import           Data.Aeson.Encoding
-import qualified Data.CaseInsensitive               as CI
+import qualified Data.CaseInsensitive        as CI
 import           Data.Hashable
-import           Data.HashMap.Strict                (HashMap, fromList, toList)
-import qualified Data.HashMap.Strict                as HashMap
-import           Data.HashSet                       (HashSet)
-import qualified Data.HashSet                       as HashSet
+import           Data.HashMap.Strict         (HashMap, fromList, toList)
+import qualified Data.HashMap.Strict         as HashMap
+import           Data.HashSet                (HashSet)
+import qualified Data.HashSet                as HashSet
 import           Data.Monoid
-import           Data.Set                           (Set)
-import           Data.Text                          (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding                 (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Lazy.Builder             as TB
-import qualified Data.Text.Lazy.Builder.Int         as TB
-import qualified Data.Text.Read                     as Text
+import           Data.Set                    (Set)
+import           Data.Text                   (Text, isPrefixOf, toLower)
+import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
+import qualified Data.Text.Lazy.Builder      as TB
+import qualified Data.Text.Lazy.Builder.Int  as TB
+import qualified Data.Text.Read              as Text
 import           Data.Word
-import           GHC.Generics                       (Generic)
+import           GHC.Generics                (Generic)
 import           OpenTracing.Reporter.Config
 import           OpenTracing.Types
 import           System.Random.MWC
@@ -155,7 +156,17 @@ data Env = Env
 newEnv :: MonadIO m => ConfigSource -> m Env
 newEnv cs = Env <$> newPRNG <*> loadConfig cs
 
-type Tracer = ReaderT Env
+newtype Tracer m a = Tracer (ReaderT Env m a)
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadIO
+             , MonadTrans
+             , MonadReader Env
+             , MonadCatch
+             , MonadMask
+             , MonadThrow
+             )
 
 traceStart
     :: MonadIO m
@@ -170,7 +181,7 @@ traceStart name refs tags = do
     newSpan ctx name refs tags
 
 runTracer :: MonadIO m => Env -> Tracer m a -> m a
-runTracer = flip runReaderT
+runTracer e (Tracer m) = runReaderT m e
 
 newPRNG :: MonadIO m => m PRNG
 newPRNG = PRNG <$> liftIO createSystemRandom

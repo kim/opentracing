@@ -1,34 +1,54 @@
 module OpenTracing
-    ( module OpenTracing.Reporter
-    , module OpenTracing.Reporter.Config
-    , module OpenTracing.Tracer
-    , module OpenTracing.Types
+    ( module OpenTracing.Types
 
-    , traceStartSafe
+    , Context
+    , Tracer
+    , Env
+    , MonadTracer(..)
+
+    , newEnv
+    , runTracer
+
+    , traceStart
+    , traceStart'
     , traceFinish
     )
 where
 
 import           Control.Monad.Catch
-import           Control.Monad.IO.Class      (MonadIO)
-import           Data.HashSet                (HashSet)
-import           Data.Set                    (Set)
-import           Data.Text                   (Text)
-import           OpenTracing.Reporter
-import           OpenTracing.Reporter.Config
-import           OpenTracing.Tracer
-import           OpenTracing.Types           hiding (traceFinish)
+import           Control.Monad.IO.Class    (MonadIO(..))
+import           Data.HashSet              (HashSet)
+import           Data.Set                  (Set)
+import           Data.Text                 (Text)
+import qualified OpenTracing.Reporter      as OT
+import           OpenTracing.Tracer        (Context, Env, Tracer, newEnv, runTracer)
+import qualified OpenTracing.Tracer        as OT
+import           OpenTracing.Tracer.Class  (MonadTracer (..))
+import           OpenTracing.Types         hiding (traceFinish)
 import qualified OpenTracing.Types
 
 
-traceStartSafe
-    :: (MonadMask m, MonadIO m)
+traceStart'
+    :: ( MonadTracer m
+       , MonadMask   m
+       , MonadIO     m
+       )
     => Text
     -> HashSet (Reference Context)
     -> Set Tag
-    -> (Span Context -> Tracer m a)
-    -> Tracer m a
-traceStartSafe n refs tags = bracket (traceStart n refs tags) traceFinish
+    -> (Span Context -> m a)
+    -> m a
+traceStart' n refs tags = bracket (traceStart n refs tags) traceFinish
 
-traceFinish :: MonadIO m => Span Context -> Tracer m ()
-traceFinish s = OpenTracing.Types.traceFinish s >>= traceReport
+traceStart
+    :: ( MonadTracer m
+       , MonadIO     m
+       )
+    => Text
+    -> HashSet (Reference Context)
+    -> Set Tag
+    -> m (Span Context)
+traceStart n refs tags = liftTracer $ OT.traceStart n refs tags
+
+traceFinish :: (MonadTracer m, MonadIO m) => Span Context -> m ()
+traceFinish s = OpenTracing.Types.traceFinish s >>= liftTracer . OT.traceReport

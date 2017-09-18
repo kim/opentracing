@@ -9,15 +9,17 @@ library
       , base
       , case-insensitive
       , containers
+      , exceptions
       , hashable
       , lens
       , mtl
       , mwc-random
-      , opentracing-types
-      , reporter-config-sig
       , serialise
       , text
       , unordered-containers
+
+      , opentracing-types
+      , reporter-config-sig
 
     exposed-modules:
         OpenTracing.Tracer.Simple
