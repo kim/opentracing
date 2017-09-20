@@ -1,9 +1,9 @@
-name:          example
+name:          simple
 version:       0.1.0.0
 build-type:    Simple
 cabal-version: >= 2
 
-executable opentracing-example
+executable opentracing-example-simple
     main-is: Main.hs
 
     build-depends:
@@ -12,9 +12,7 @@ executable opentracing-example
       , mtl
 
       , opentracing-indef
-      , reporter-sig
       , reporter-simple
-      , tracer-sig
       , tracer-simple
 
     ghc-options:      -Wall -O

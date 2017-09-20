@@ -1,0 +1,20 @@
+name:          zipkin
+version:       0.1.0.0
+build-type:    Simple
+cabal-version: >= 2
+
+executable opentracing-example-zipkin
+    main-is: Main.hs
+
+    build-depends:
+        base
+      , lens
+      , mtl
+
+      , opentracing-indef
+      , reporter-config-zipkin-http
+      , reporter-zipkin-http
+      , tracer-zipkin
+
+    ghc-options:      -Wall -O
+    default-language: Haskell2010

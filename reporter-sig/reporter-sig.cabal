@@ -6,6 +6,8 @@ cabal-version: >= 1.25
 library
     build-depends:
         base
+      , mtl
+
       , opentracing-types
       , tracer-sig
 

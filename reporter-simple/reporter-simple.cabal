@@ -10,10 +10,11 @@ library
       , bytestring
       , http-types
       , lens
+      , mtl
+      , text
+
       , opentracing-types
       , reporter-config-simple
-      , text
-      , tracer-sig
       , tracer-simple
 
     exposed-modules:

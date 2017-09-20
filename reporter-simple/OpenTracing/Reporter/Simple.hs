@@ -9,23 +9,23 @@ import Data.Aeson.Encoding
 import Data.ByteString.Lazy.Char8 (putStrLn)
 import Data.Foldable              (toList)
 import Data.Monoid
-import GHC.Stack
+import GHC.Stack                  (prettyCallStack)
 import Network.HTTP.Types         (statusCode)
 import OpenTracing.Tracer.Simple
 import OpenTracing.Types
 import Prelude                    hiding (putStrLn)
 
 
-traceReport :: MonadIO m => FinishedSpan Context -> Tracer m ()
+traceReport :: MonadIO m  => FinishedSpan Context -> Tracer m ()
 traceReport = liftIO . putStrLn . encodingToLazyByteString . spanE
 
 
 spanE :: FinishedSpan Context -> Encoding
 spanE s = pairs $
-       pair "operation"  (text (view spanOperation s))
-    <> pair "start"      (utcTime (view spanStart s))
-    <> pair "duration"   (double (realToFrac (view spanDuration s)))
-    <> pair "context"    (toEncoding (view spanContext s))
+       pair "operation"  (text $ view spanOperation s)
+    <> pair "start"      (utcTime $ view spanStart s)
+    <> pair "duration"   (double . realToFrac $ view spanDuration s)
+    <> pair "context"    (toEncoding $ view spanContext s)
     <> pair "references" (list refE . toList $ view spanRefs s)
     <> pair "tags"       (list tagE . toList $ view spanTags s)
     <> pair "logs"       (list logRecE . reverse $ view spanLogs s)
@@ -53,7 +53,7 @@ tagE t = pairs . pair (tagLabel t) $ case t of
     PeerPort              x -> word64 . fromIntegral $ x
     PeerService           x -> text x
     SamplingPriority      x -> word8 x
-    SpanKind              x -> text x
+    SpanKind              x -> text (spanKindLabel x)
     SomeTag             _ x -> text x
 
 logRecE :: LogRecord -> Encoding

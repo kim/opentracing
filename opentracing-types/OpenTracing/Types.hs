@@ -38,6 +38,8 @@ module OpenTracing.Types
     , Reference(..)
     , Tag(..)
     , tagLabel
+    , SpanKinds(..)
+    , spanKindLabel
 
     , LogRecord
     , logTime
@@ -168,7 +170,7 @@ data Tag
     | PeerPort              PortNumber
     | PeerService           Text
     | SamplingPriority      Word8
-    | SpanKind              Text
+    | SpanKind              SpanKinds
 
     | SomeTag Text          Text
     deriving (Eq, Show, Ord)
@@ -193,6 +195,20 @@ tagLabel (PeerService           _) = "peer.service"
 tagLabel (SamplingPriority      _) = "sampling.priority"
 tagLabel (SpanKind              _) = "span.kind"
 tagLabel (SomeTag             x _) = x
+
+data SpanKinds
+    = RPCClient
+    | RPCServer
+    | Producer
+    | Consumer
+    deriving (Eq, Show, Ord)
+
+spanKindLabel :: SpanKinds -> Text
+spanKindLabel RPCClient = "client"
+spanKindLabel RPCServer = "server"
+spanKindLabel Producer  = "producer"
+spanKindLabel Consumer  = "consumer"
+
 
 data LogRecord = LogRecord
     { _logTime   :: UTCTime

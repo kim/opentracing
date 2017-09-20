@@ -79,6 +79,8 @@ newtype PRNG = PRNG { unPRNG :: GenIO }
 type TraceID = Word64
 type SpanID  = Word64
 
+type Context = SimpleContext
+
 data SimpleContext = SimpleContext
     { ctxTraceID  :: TraceID
     , ctxSpanID   :: SpanID
@@ -104,8 +106,6 @@ instance ToJSON SimpleContext where
         ]
 
 
-type Context = SimpleContext
-
 instance AsCarrier (TextMap SimpleContext) SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
@@ -115,7 +115,7 @@ instance AsCarrier (TextMap SimpleContext) SimpleContext where
                 , ("ot-tracer-spanid" , review _ID ctxSpanID)
                 , ("ot-tracer-sampled", review _Sampled _ctxSampled)
                 ])
-            <> (fromList (map (\x -> over _1 ("ot-baggage-" <>) x) (toList _ctxBaggage)))
+            <> (fromList (map (over _1 ("ot-baggage-" <>)) (toList _ctxBaggage)))
 
         toCtx (TextMap m) = SimpleContext
             <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _ID)
@@ -198,6 +198,7 @@ _ID = prism' enc dec
     enc = view strict . TB.toLazyText . TB.decimal
     dec = either (const Nothing) (pure . fst) . Text.decimal
 {-# INLINE _ID #-}
+
 _Sampled :: Prism' Text Sampled
 _Sampled = prism' enc dec
     where
@@ -217,7 +218,7 @@ freshContext = do
     return SimpleContext
         { ctxTraceID  = trid
         , ctxSpanID   = spid
-        , _ctxSampled = NotSampled
+        , _ctxSampled = Sampled
         , _ctxBaggage = mempty
         }
 
