@@ -154,7 +154,7 @@ newtype PRNG = PRNG { unPRNG :: GenIO }
 data Env = Env
     { envPRNG           :: PRNG
     , envReporterConfig :: Config
-    , _envTraceID128bit  :: Bool
+    , _envTraceID128bit :: Bool
     }
 
 newEnv :: MonadIO m => ConfigSource -> m Env
