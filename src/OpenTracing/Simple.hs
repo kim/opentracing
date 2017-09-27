@@ -1,16 +1,13 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
 
-module OpenTracing.Tracer.Simple
+module OpenTracing.Simple
     ( Sampled(..)
 
     , Context
@@ -19,45 +16,38 @@ module OpenTracing.Tracer.Simple
     , ctxSampled
     , ctxBaggage
 
-    , Tracer
-    , Env(envPRNG, envReporterConfig)
+    , Env
     , newEnv
 
-    , PRNG
-    , TraceID
-    , SpanID
-
-    , newPRNG
-
-    , traceStart
-
-    , runTracer
+    , simpleTracer
+    , simpleReporter
     )
 where
 
 import           Codec.Serialise
-import           Control.Lens                hiding (Context, (.=))
-import           Control.Monad.Catch
+import           Control.Lens               hiding (Context, (.=))
 import           Control.Monad.Reader
-import           Data.Aeson
+import           Data.Aeson                 hiding (Error)
 import           Data.Aeson.Encoding
-import qualified Data.CaseInsensitive        as CI
+import           Data.ByteString.Lazy.Char8 (putStrLn)
+import qualified Data.CaseInsensitive       as CI
+import           Data.Foldable              (toList)
 import           Data.Hashable
-import           Data.HashMap.Strict         (HashMap, fromList, toList)
-import qualified Data.HashMap.Strict         as HashMap
-import           Data.HashSet                (HashSet)
-import qualified Data.HashSet                as HashSet
+import           Data.HashMap.Strict        (HashMap)
+import qualified Data.HashMap.Strict        as HashMap
 import           Data.Monoid
-import           Data.Set                    (Set)
-import           Data.Text                   (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Lazy.Builder      as TB
-import qualified Data.Text.Lazy.Builder.Int  as TB
-import qualified Data.Text.Read              as Text
+import           Data.Text                  (Text, isPrefixOf, toLower)
+import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
+import qualified Data.Text.Lazy.Builder     as TB
+import qualified Data.Text.Lazy.Builder.Int as TB
+import qualified Data.Text.Read             as Text
 import           Data.Word
-import           GHC.Generics                (Generic)
-import           OpenTracing.Reporter.Config
+import           GHC.Generics               (Generic)
+import           GHC.Stack                  (prettyCallStack)
+import           Network.HTTP.Types         (statusCode)
+import           OpenTracing.Class
 import           OpenTracing.Types
+import           Prelude                    hiding (putStrLn)
 import           System.Random.MWC
 
 
@@ -109,13 +99,11 @@ instance ToJSON SimpleContext where
 instance AsCarrier (TextMap SimpleContext) SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
-        fromCtx SimpleContext{..} = TextMap $
-            (fromList
-                [ ("ot-tracer-traceid", review _ID ctxTraceID)
-                , ("ot-tracer-spanid" , review _ID ctxSpanID)
-                , ("ot-tracer-sampled", review _Sampled _ctxSampled)
-                ])
-            <> (fromList (map (over _1 ("ot-baggage-" <>)) (toList _ctxBaggage)))
+        fromCtx SimpleContext{..} = TextMap . HashMap.fromList $
+              ("ot-tracer-traceid", review _ID ctxTraceID)
+            : ("ot-tracer-spanid" , review _ID ctxSpanID)
+            : ("ot-tracer-sampled", review _Sampled _ctxSampled)
+            : map (over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = SimpleContext
             <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _ID)
@@ -130,14 +118,14 @@ instance AsCarrier (HttpHeaders SimpleContext) SimpleContext where
         fromCtx
             = HttpHeaders
             . map (bimap (CI.mk . encodeUtf8) encodeUtf8)
-            . toList
+            . HashMap.toList
             . fromTextMap
             . (review _Carrier :: Context -> TextMap Context)
 
         toCtx
             = (preview _Carrier :: TextMap Context -> Maybe Context)
             . TextMap
-            . fromList
+            . HashMap.fromList
             . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
             . fromHttpHeaders
 
@@ -149,39 +137,37 @@ instance AsCarrier (Binary SimpleContext) SimpleContext where
 
 
 data Env = Env
-    { envPRNG           :: PRNG
-    , envReporterConfig :: Config
+    { envPRNG :: PRNG
     }
 
-newEnv :: MonadIO m => ConfigSource -> m Env
-newEnv cs = Env <$> newPRNG <*> loadConfig cs
+newEnv :: MonadIO m => m Env
+newEnv = Env <$> newPRNG
 
-newtype Tracer m a = Tracer (ReaderT Env m a)
-    deriving ( Functor
-             , Applicative
-             , Monad
-             , MonadIO
-             , MonadTrans
-             , MonadReader Env
-             , MonadCatch
-             , MonadMask
-             , MonadThrow
-             )
+instance MonadIO m => MonadTrace SimpleContext (ReaderT Env m) where
+    traceStart = start
 
-traceStart
-    :: MonadIO m
-    => Text
-    -> HashSet (Reference Context)
-    -> Set Tag
-    -> Tracer m (Span Context)
-traceStart name refs tags = do
-    ctx <- case HashSet.toList refs of
+instance MonadIO m => MonadReport SimpleContext m where
+    traceReport = report
+
+simpleTracer :: Env -> Interpret (MonadTrace SimpleContext) MonadIO
+simpleTracer r = Interpret $ \m -> runReaderT m r
+
+simpleReporter :: Interpret (MonadReport SimpleContext) MonadIO
+simpleReporter = Interpret id
+
+--------------------------------------------------------------------------------
+-- Internal
+
+start :: (MonadIO m, MonadReader Env m) => SpanOpts Context -> m (Span Context)
+start SpanOpts{..} = do
+    ctx <- case spanOptRefs of
                []    -> freshContext
                (p:_) -> fromParent p
-    newSpan ctx name refs tags
+    newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
-runTracer :: MonadIO m => Env -> Tracer m a -> m a
-runTracer e (Tracer m) = runReaderT m e
+report :: MonadIO m => FinishedSpan Context -> m ()
+report = liftIO . putStrLn . encodingToLazyByteString . spanE
+
 
 newPRNG :: MonadIO m => m PRNG
 newPRNG = PRNG <$> liftIO createSystemRandom
@@ -232,5 +218,54 @@ fromParent p = do
         , _ctxSampled = _ctxSampled (refCtx p)
         , _ctxBaggage = mempty
         }
+
+spanE :: FinishedSpan Context -> Encoding
+spanE s = pairs $
+       pair "operation"  (text $ view spanOperation s)
+    <> pair "start"      (utcTime $ view spanStart s)
+    <> pair "duration"   (double . realToFrac $ view spanDuration s)
+    <> pair "context"    (toEncoding $ view spanContext s)
+    <> pair "references" (list refE . toList $ view spanRefs s)
+    <> pair "tags"       (list tagE . toList $ view spanTags s)
+    <> pair "logs"       (list logRecE . reverse $ view spanLogs s)
+
+refE :: Reference Context -> Encoding
+refE (ChildOf     ctx) = pairs . pair "child_of"     . toEncoding $ ctx
+refE (FollowsFrom ctx) = pairs . pair "follows_from" . toEncoding $ ctx
+
+tagE :: Tag -> Encoding
+tagE t = pairs . pair (tagLabel t) $ case t of
+    Component             x -> text x
+    DbInstance            x -> text x
+    DbStatement           x -> text x
+    DbType                x -> text x
+    DbUser                x -> text x
+    Error                 x -> bool x
+    HttpMethod            x -> string . show $ x
+    HttpStatusCode        x -> int . statusCode $ x
+    HttpUrl               x -> text x
+    MessageBusDestination x -> text x
+    PeerAddress           x -> text x
+    PeerHostname          x -> text x
+    PeerIPv4              x -> string . show $ x
+    PeerIPv6              x -> string . show $ x
+    PeerPort              x -> toEncoding x
+    PeerService           x -> text x
+    SamplingPriority      x -> word8 x
+    SpanKind              x -> text (spanKindLabel x)
+    SomeTag             _ x -> text x
+
+logRecE :: LogRecord -> Encoding
+logRecE r = pairs $
+       pair "time"   (utcTime (view logTime r))
+    <> pair "fields" (list logFieldE . toList $ view logFields r)
+
+logFieldE :: LogField -> Encoding
+logFieldE f = pairs . pair (logFieldLabel f) $ case f of
+    Event      x -> text x
+    Message    x -> text x
+    Stack      x -> string . prettyCallStack $ x
+    ErrKind    x -> text x
+    LogField _ x -> string (show x)
 
 makeLenses ''SimpleContext

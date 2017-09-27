@@ -6,12 +6,11 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
 module OpenTracing.Types
-    ( ConfigSource(..)
-
-    , TextMap(..)
+    ( TextMap(..)
     , textMap
     , HttpHeaders(..)
     , httpHeaders
@@ -26,7 +25,7 @@ module OpenTracing.Types
     , Span
     , newSpan
     , FinishedSpan
-    , traceFinish
+    , defaultTraceFinish
     , spanContext
     , spanOperation
     , spanStart
@@ -34,6 +33,8 @@ module OpenTracing.Types
     , spanRefs
     , spanLogs
     , spanDuration
+
+    , SpanOpts(..)
 
     , Reference(..)
     , Tag(..)
@@ -47,31 +48,34 @@ module OpenTracing.Types
 
     , LogField(..)
     , logFieldLabel
+
+    , IPv4(..)
+    , IPv6(..)
+    , Port(..)
     )
 where
 
 import           Control.Lens           hiding (op)
 import           Control.Monad.IO.Class
+import           Data.Aeson             (ToJSON (..))
+import           Data.Aeson.Encoding    (string, word16)
 import qualified Data.ByteString.Lazy   as Lazy
 import           Data.Hashable
 import           Data.HashMap.Strict    (HashMap)
 import           Data.HashSet           (HashSet)
-import           Data.IP                (IPv4, IPv6)
+import qualified Data.HashSet           as HashSet
+import qualified Data.IP                as IP
 import           Data.List.NonEmpty     (NonEmpty)
 import           Data.Monoid
 import           Data.Set               (Set)
+import qualified Data.Set               as Set
 import           Data.Text              (Text)
 import           Data.Time.Clock
 import           Data.Word
 import           GHC.Generics           (Generic)
 import           GHC.Stack
-import           Network                (PortNumber)
 import           Network.HTTP.Types     (Header, Status, StdMethod)
 import           Prelude                hiding (span)
-
-
-data ConfigSource = FromEnv | FromFile FilePath
-    deriving (Eq, Show)
 
 
 newtype TextMap ctx = TextMap { fromTextMap :: HashMap Text Text }
@@ -112,11 +116,14 @@ data Span ctx = Span
     } deriving Show
 
 newSpan
-    :: MonadIO m
+    :: ( MonadIO  m
+       , Eq       ctx
+       , Hashable ctx
+       )
     => ctx
     -> Text
-    -> HashSet (Reference ctx)
-    -> Set Tag
+    -> [Reference ctx]
+    -> [Tag]
     -> m (Span ctx)
 newSpan ctx op rs ts = do
     t <- liftIO getCurrentTime
@@ -124,8 +131,8 @@ newSpan ctx op rs ts = do
         { _spanContext   = ctx
         , _spanOperation = op
         , _spanStart     = t
-        , _spanTags      = ts
-        , _spanRefs      = rs
+        , _spanTags      = Set.fromList ts
+        , _spanRefs      = HashSet.fromList rs
         , _spanLogs      = mempty
         }
 
@@ -135,13 +142,20 @@ data FinishedSpan ctx = FinishedSpan
     , _spanDuration :: NominalDiffTime
     } deriving Show
 
-traceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
-traceFinish s = do
+defaultTraceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
+defaultTraceFinish s = do
     t <- liftIO getCurrentTime
     pure FinishedSpan
         { _spanSpan     = s
         , _spanDuration = diffUTCTime t (_spanStart s)
         }
+
+
+data SpanOpts ctx = SpanOpts
+    { spanOptOperation :: Text
+    , spanOptRefs      :: [Reference ctx]
+    , spanOptTags      :: [Tag]
+    }
 
 
 data Reference ctx
@@ -167,7 +181,7 @@ data Tag
     | PeerHostname          Text
     | PeerIPv4              IPv4
     | PeerIPv6              IPv6
-    | PeerPort              PortNumber
+    | PeerPort              Port
     | PeerService           Text
     | SamplingPriority      Word8
     | SpanKind              SpanKinds
@@ -231,6 +245,37 @@ logFieldLabel (Message    _) = "message"
 logFieldLabel (Stack      _) = "stack"
 logFieldLabel (ErrKind    _) = "error.kind"
 
+
+newtype IPv4 = IPv4 { fromIPv4 :: IP.IPv4 }
+    deriving (Bounded, Enum, Eq, Ord)
+
+newtype IPv6 = IPv6 { fromIPv6 :: IP.IPv6 }
+    deriving (Bounded, Enum, Eq, Ord)
+
+instance Show IPv4 where show = show . fromIPv4
+instance Show IPv6 where show = show . fromIPv6
+
+instance Read IPv4 where readsPrec p = map (over _1 IPv4) . readsPrec p
+instance Read IPv6 where readsPrec p = map (over _1 IPv6) . readsPrec p
+
+instance ToJSON IPv4 where
+    toJSON     = toJSON . show . fromIPv4
+    toEncoding = string . show . fromIPv4
+
+instance ToJSON IPv6 where
+    toJSON     = toJSON . show . fromIPv6
+    toEncoding = string . show . fromIPv6
+
+
+newtype Port = Port { fromPort :: Word16 }
+    deriving (Enum, Eq, Num, Ord)
+
+instance Show Port where show = show . fromPort
+instance Read Port where readsPrec p = map (over _1 Port) . readsPrec p
+
+instance ToJSON Port where
+    toJSON     = toJSON . fromPort
+    toEncoding = word16 . fromPort
 
 makeClassy ''Span
 makeLenses ''FinishedSpan
