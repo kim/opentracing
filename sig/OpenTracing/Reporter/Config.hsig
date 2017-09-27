@@ -1,9 +1,0 @@
-signature OpenTracing.Reporter.Config where
-
-import Control.Monad.IO.Class (MonadIO)
-import OpenTracing.Types      (ConfigSource)
-
-
-data Config
-
-loadConfig :: MonadIO m => ConfigSource -> m Config

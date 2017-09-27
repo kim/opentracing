@@ -1,8 +1,0 @@
-signature OpenTracing.Reporter where
-
-import Control.Monad.IO.Class (MonadIO)
-import OpenTracing.Tracer
-import OpenTracing.Types
-
-
-traceReport :: MonadIO m => FinishedSpan Context -> Tracer m ()
