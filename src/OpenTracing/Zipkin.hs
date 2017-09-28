@@ -128,12 +128,6 @@ instance AsCarrier (HttpHeaders ZipkinContext) ZipkinContext where
             . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
             . fromHttpHeaders
 
-instance AsCarrier (Binary ZipkinContext) ZipkinContext where
-    _Carrier = prism' fromCtx toCtx
-      where
-        fromCtx = Binary . serialise
-        toCtx   = either (const Nothing) pure . deserialiseOrFail . fromBinary
-
 
 data Env = Env
     { envPRNG           :: GenIO

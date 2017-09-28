@@ -14,8 +14,6 @@ module OpenTracing.Types
     , textMap
     , HttpHeaders(..)
     , httpHeaders
-    , Binary(..)
-    , binary
 
     , AsCarrier(..)
 
@@ -59,7 +57,6 @@ import           Control.Lens           hiding (op)
 import           Control.Monad.IO.Class
 import           Data.Aeson             (ToJSON (..))
 import           Data.Aeson.Encoding    (string, word16)
-import qualified Data.ByteString.Lazy   as Lazy
 import           Data.Hashable
 import           Data.HashMap.Strict    (HashMap)
 import           Data.HashSet           (HashSet)
@@ -84,8 +81,15 @@ newtype TextMap ctx = TextMap { fromTextMap :: HashMap Text Text }
 newtype HttpHeaders ctx = HttpHeaders { fromHttpHeaders :: [Header] }
     deriving (Eq, Show, Monoid)
 
+{-
+   skip for now: not clear what this is for (the whole stack would need to
+   agree on the encoding)
 newtype Binary ctx = Binary { fromBinary :: Lazy.ByteString }
     deriving (Eq, Show, Monoid)
+
+binary :: Binary ctx
+binary = mempty
+-}
 
 textMap :: TextMap ctx
 textMap = mempty
@@ -93,8 +97,6 @@ textMap = mempty
 httpHeaders :: HttpHeaders ctx
 httpHeaders = mempty
 
-binary :: Binary ctx
-binary = mempty
 
 class AsCarrier a ctx | a -> ctx where
     _Carrier :: Prism' a ctx
