@@ -34,7 +34,6 @@ import           Data.Word
 import           GHC.Generics             (Generic)
 import           GHC.Stack                (prettyCallStack)
 import           Network.HTTP.Client      hiding (port)
-import           Network.HTTP.Types       (statusCode)
 import           OpenTracing.Class
 import           OpenTracing.Types
 import           OpenTracing.Zipkin       hiding (Env, newEnv)
@@ -121,7 +120,7 @@ spanE loc s = pairs $
     <> pair "localEndpoint"  (toEncoding loc)
     <> pair "remoteEndpoint" (view (spanTags . to remoteEndpoint . to toEncoding) s)
     <> pair "annotations"    (list logRecE $ view spanLogs s)
-    <> pair "tags"           (list tagE . toList $ view spanTags s)
+    <> pair "tags"           (list toEncoding . toList $ view spanTags s)
     -- nb. references are lost, perhaps we should stick them into annotations?
 
 
@@ -151,28 +150,6 @@ logRecE r = pairs $
         Stack      x -> view packed . prettyCallStack $ x
         ErrKind    x -> x
         LogField _ x -> view packed (show x)
-
-tagE :: Tag -> Encoding
-tagE t = pairs . pair (tagLabel t) $ case t of
-    Component             x -> text x
-    DbInstance            x -> text x
-    DbStatement           x -> text x
-    DbType                x -> text x
-    DbUser                x -> text x
-    Error                 x -> bool x
-    HttpMethod            x -> string . show $ x
-    HttpStatusCode        x -> int . statusCode $ x
-    HttpUrl               x -> text x
-    MessageBusDestination x -> text x
-    PeerAddress           x -> text x
-    PeerHostname          x -> text x
-    PeerIPv4              x -> string . show $ x
-    PeerIPv6              x -> string . show $ x
-    PeerPort              x -> toEncoding x
-    PeerService           x -> text x
-    SamplingPriority      x -> word8 x
-    SpanKind              x -> text (spanKindLabel x)
-    SomeTag             _ x -> text x
 
 micros :: POSIXTime -> Word64
 micros = round . (1000000 *)

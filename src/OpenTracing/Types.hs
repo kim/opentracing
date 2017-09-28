@@ -8,6 +8,7 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TupleSections              #-}
 
 module OpenTracing.Types
     ( TextMap(..)
@@ -55,8 +56,8 @@ where
 
 import           Control.Lens           hiding (op)
 import           Control.Monad.IO.Class
-import           Data.Aeson             (ToJSON (..))
-import           Data.Aeson.Encoding    (string, word16)
+import           Data.Aeson             (ToJSON (..), object)
+import           Data.Aeson.Encoding
 import           Data.Hashable
 import           Data.HashMap.Strict    (HashMap)
 import           Data.HashSet           (HashSet)
@@ -67,11 +68,13 @@ import           Data.Monoid
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 import           Data.Text              (Text)
+import           Data.Text.Encoding     (decodeUtf8)
 import           Data.Time.Clock
 import           Data.Word
 import           GHC.Generics           (Generic)
 import           GHC.Stack
-import           Network.HTTP.Types     (Header, Status, StdMethod)
+import           Network.HTTP.Types
+    (Header, Status, StdMethod, renderStdMethod, statusCode)
 import           Prelude                hiding (span)
 
 
@@ -212,6 +215,49 @@ tagLabel (SamplingPriority      _) = "sampling.priority"
 tagLabel (SpanKind              _) = "span.kind"
 tagLabel (SomeTag             x _) = x
 
+instance ToJSON Tag where
+    toJSON     t = object . (:[]) . (tagLabel t,) $ case t of
+        Component             x -> toJSON x
+        DbInstance            x -> toJSON x
+        DbStatement           x -> toJSON x
+        DbType                x -> toJSON x
+        DbUser                x -> toJSON x
+        Error                 x -> toJSON x
+        HttpMethod            x -> toJSON . decodeUtf8 . renderStdMethod $ x
+        HttpStatusCode        x -> toJSON . statusCode $ x
+        HttpUrl               x -> toJSON x
+        MessageBusDestination x -> toJSON x
+        PeerAddress           x -> toJSON x
+        PeerHostname          x -> toJSON x
+        PeerIPv4              x -> toJSON . show $ x
+        PeerIPv6              x -> toJSON . show $ x
+        PeerPort              x -> toJSON x
+        PeerService           x -> toJSON x
+        SamplingPriority      x -> toJSON x
+        SpanKind              x -> toJSON x
+        SomeTag             _ x -> toJSON x
+
+    toEncoding t = pairs . pair (tagLabel t) $ case t of
+        Component             x -> text x
+        DbInstance            x -> text x
+        DbStatement           x -> text x
+        DbType                x -> text x
+        DbUser                x -> text x
+        Error                 x -> bool x
+        HttpMethod            x -> text . decodeUtf8 . renderStdMethod $ x
+        HttpStatusCode        x -> int . statusCode $ x
+        HttpUrl               x -> text x
+        MessageBusDestination x -> text x
+        PeerAddress           x -> text x
+        PeerHostname          x -> text x
+        PeerIPv4              x -> string . show $ x
+        PeerIPv6              x -> string . show $ x
+        PeerPort              x -> toEncoding x
+        PeerService           x -> text x
+        SamplingPriority      x -> word8 x
+        SpanKind              x -> toEncoding x
+        SomeTag             _ x -> text x
+
 data SpanKinds
     = RPCClient
     | RPCServer
@@ -224,6 +270,10 @@ spanKindLabel RPCClient = "client"
 spanKindLabel RPCServer = "server"
 spanKindLabel Producer  = "producer"
 spanKindLabel Consumer  = "consumer"
+
+instance ToJSON SpanKinds where
+    toJSON     = toJSON . spanKindLabel
+    toEncoding = text   . spanKindLabel
 
 
 data LogRecord = LogRecord

@@ -43,7 +43,6 @@ import qualified Data.Text.Read             as Text
 import           Data.Word
 import           GHC.Generics               (Generic)
 import           GHC.Stack                  (prettyCallStack)
-import           Network.HTTP.Types         (statusCode)
 import           OpenTracing.Class
 import           OpenTracing.Types
 import           Prelude                    hiding (putStrLn)
@@ -217,34 +216,12 @@ spanE s = pairs $
     <> pair "duration"   (double . realToFrac $ view spanDuration s)
     <> pair "context"    (toEncoding $ view spanContext s)
     <> pair "references" (list refE . toList $ view spanRefs s)
-    <> pair "tags"       (list tagE . toList $ view spanTags s)
+    <> pair "tags"       (list toEncoding . toList $ view spanTags s)
     <> pair "logs"       (list logRecE . reverse $ view spanLogs s)
 
 refE :: Reference Context -> Encoding
 refE (ChildOf     ctx) = pairs . pair "child_of"     . toEncoding $ ctx
 refE (FollowsFrom ctx) = pairs . pair "follows_from" . toEncoding $ ctx
-
-tagE :: Tag -> Encoding
-tagE t = pairs . pair (tagLabel t) $ case t of
-    Component             x -> text x
-    DbInstance            x -> text x
-    DbStatement           x -> text x
-    DbType                x -> text x
-    DbUser                x -> text x
-    Error                 x -> bool x
-    HttpMethod            x -> string . show $ x
-    HttpStatusCode        x -> int . statusCode $ x
-    HttpUrl               x -> text x
-    MessageBusDestination x -> text x
-    PeerAddress           x -> text x
-    PeerHostname          x -> text x
-    PeerIPv4              x -> string . show $ x
-    PeerIPv6              x -> string . show $ x
-    PeerPort              x -> toEncoding x
-    PeerService           x -> text x
-    SamplingPriority      x -> word8 x
-    SpanKind              x -> text (spanKindLabel x)
-    SomeTag             _ x -> text x
 
 logRecE :: LogRecord -> Encoding
 logRecE r = pairs $
