@@ -41,15 +41,15 @@ import           OpenTracing.Zipkin       hiding (Env, newEnv)
 
 
 data Endpoint = Endpoint
-    { srv  :: Maybe Text
-    , ipv4 :: Maybe IPv4
-    , ipv6 :: Maybe IPv6
-    , port :: Maybe Port
+    { serviceName :: Maybe Text
+    , ipv4        :: Maybe IPv4
+    , ipv6        :: Maybe IPv6
+    , port        :: Maybe Port
     } deriving (Eq, Show, Generic)
 
 instance ToJSON Endpoint where
     toEncoding Endpoint{..} = pairs . mconcat . catMaybes $
-        [ pair "serviceName" . text <$> srv
+        [ pair "serviceName" . text <$> serviceName
         , pair "ipv4" . toEncoding  <$> ipv4
         , pair "ipv6" . toEncoding  <$> ipv6
         , pair "port" . toEncoding  <$> port
@@ -133,10 +133,10 @@ spanKind ts = lookupLT (SomeTag mempty mempty) ts >>= \case
 remoteEndpoint :: Set Tag -> Endpoint
 remoteEndpoint = foldl' matchTag (Endpoint Nothing Nothing Nothing Nothing)
   where
-    matchTag ep (PeerService s) = ep { srv  = Just s  }
-    matchTag ep (PeerIPv4   ip) = ep { ipv4 = Just ip }
-    matchTag ep (PeerIPv6   ip) = ep { ipv6 = Just ip }
-    matchTag ep (PeerPort    p) = ep { port = Just p  }
+    matchTag ep (PeerService s) = ep { serviceName = Just s  }
+    matchTag ep (PeerIPv4   ip) = ep { ipv4        = Just ip }
+    matchTag ep (PeerIPv6   ip) = ep { ipv6        = Just ip }
+    matchTag ep (PeerPort    p) = ep { port        = Just p  }
 
     matchTag ep _               = ep
 
