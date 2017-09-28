@@ -61,8 +61,6 @@ instance ToJSON Sampled where
     toJSON Sampled    = toJSON (1 :: Word8)
     toJSON NotSampled = toJSON (0 :: Word8)
 
-newtype PRNG = PRNG { unPRNG :: GenIO }
-
 type TraceID = Word64
 type SpanID  = Word64
 
@@ -127,11 +125,11 @@ instance AsCarrier (HttpHeaders SimpleContext) SimpleContext where
 
 
 data Env = Env
-    { envPRNG :: PRNG
+    { envPRNG :: GenIO
     }
 
 newEnv :: MonadIO m => m Env
-newEnv = Env <$> newPRNG
+newEnv = Env <$> liftIO createSystemRandom
 
 instance MonadIO m => MonadTrace SimpleContext (ReaderT Env m) where
     traceStart = start
@@ -158,15 +156,11 @@ start SpanOpts{..} = do
 report :: MonadIO m => FinishedSpan Context -> m ()
 report = liftIO . putStrLn . encodingToLazyByteString . spanE
 
+newTraceID :: MonadIO m => GenIO -> m TraceID
+newTraceID = liftIO . uniform
 
-newPRNG :: MonadIO m => m PRNG
-newPRNG = PRNG <$> liftIO createSystemRandom
-
-newTraceID :: MonadIO m => PRNG -> m TraceID
-newTraceID = liftIO . uniform . unPRNG
-
-newSpanID :: MonadIO m => PRNG -> m SpanID
-newSpanID = liftIO . uniform . unPRNG
+newSpanID :: MonadIO m => GenIO -> m SpanID
+newSpanID = liftIO . uniform
 
 _ID :: Prism' Text Word64
 _ID = prism' enc dec
