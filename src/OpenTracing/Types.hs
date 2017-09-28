@@ -33,7 +33,11 @@ module OpenTracing.Types
     , spanLogs
     , spanDuration
 
+    , Sampled(..)
+    , HasSampled(..)
+
     , SpanOpts(..)
+    , spanOpts
 
     , Reference(..)
     , Tag(..)
@@ -156,10 +160,34 @@ defaultTraceFinish s = do
         }
 
 
+data Sampled = NotSampled | Sampled
+    deriving (Eq, Show, Read, Bounded, Enum, Generic)
+
+instance Hashable Sampled
+
+instance ToJSON Sampled where
+    toJSON     = toJSON . fromEnum
+    toEncoding = int . fromEnum
+
+class HasSampled ctx where
+    ctxSampled :: Lens' ctx Sampled
+
+
 data SpanOpts ctx = SpanOpts
     { spanOptOperation :: Text
     , spanOptRefs      :: [Reference ctx]
     , spanOptTags      :: [Tag]
+    , spanOptSampled   :: Maybe Sampled
+    -- ^ Force 'Span' to be sampled (or not).
+    -- 'Nothing' denotes leave decision to 'Sampler'
+    }
+
+spanOpts :: Text -> [Reference ctx] -> SpanOpts ctx
+spanOpts op ref = SpanOpts
+    { spanOptOperation = op
+    , spanOptRefs      = ref
+    , spanOptTags      = mempty
+    , spanOptSampled   = Nothing
     }
 
 
@@ -335,3 +363,9 @@ makeLenses ''LogRecord
 
 instance HasSpan (FinishedSpan ctx) ctx where
     span = spanSpan
+
+instance HasSampled ctx => HasSampled (Span ctx) where
+    ctxSampled = spanContext . ctxSampled
+
+instance HasSampled ctx => HasSampled (FinishedSpan ctx) where
+    ctxSampled = spanContext . ctxSampled

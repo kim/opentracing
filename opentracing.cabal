@@ -18,6 +18,7 @@ library
   exposed-modules:
       OpenTracing
       OpenTracing.Class
+      OpenTracing.Sampling
       OpenTracing.Simple
       OpenTracing.Types
       OpenTracing.Zipkin

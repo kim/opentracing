@@ -11,10 +11,10 @@ import OpenTracing.Simple
 
 main :: IO ()
 main = do
-    env <- newEnv
+    env <- newEnv (constSampler True)
     runTracing (Tracing (simpleTracer env) simpleReporter) $
-        traced (SpanOpts "hello" mempty           mempty) $ \parent ->
-        traced (SpanOpts "world" [childOf parent] mempty) $ \_child ->
+        traced (spanOpts "hello" mempty          ) $ \parent ->
+        traced (spanOpts "world" [childOf parent]) $ \_child ->
             liftIO $ do
                 putStrLn "doing some work..."
                 threadDelay 500000

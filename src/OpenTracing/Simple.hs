@@ -1,11 +1,13 @@
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module OpenTracing.Simple
     ( Sampled(..)
@@ -44,22 +46,11 @@ import           Data.Word
 import           GHC.Generics               (Generic)
 import           GHC.Stack                  (prettyCallStack)
 import           OpenTracing.Class
+import           OpenTracing.Sampling
 import           OpenTracing.Types
 import           Prelude                    hiding (putStrLn)
 import           System.Random.MWC
 
-
-data Sampled = Sampled | NotSampled
-    deriving (Eq, Show, Read, Generic)
-
-instance Hashable  Sampled
-
-instance ToJSON Sampled where
-    toEncoding Sampled    = word8 1
-    toEncoding NotSampled = word8 0
-
-    toJSON Sampled    = toJSON (1 :: Word8)
-    toJSON NotSampled = toJSON (0 :: Word8)
 
 type TraceID = Word64
 type SpanID  = Word64
@@ -69,23 +60,26 @@ type Context = SimpleContext
 data SimpleContext = SimpleContext
     { ctxTraceID  :: TraceID
     , ctxSpanID   :: SpanID
-    , _ctxSampled :: Sampled
+    , ctxSampled' :: Sampled
     , _ctxBaggage :: HashMap Text Text
     } deriving (Eq, Show, Generic)
 
-instance Hashable  SimpleContext
+instance Hashable SimpleContext
+
+instance HasSampled SimpleContext where
+    ctxSampled = lens ctxSampled' (\s a -> s { ctxSampled' = a })
 
 instance ToJSON SimpleContext where
     toEncoding c = pairs $
            "trace_id" .= ctxTraceID  c
         <> "span_id"  .= ctxSpanID   c
-        <> "sampled"  .= _ctxSampled c
+        <> "sampled"  .= ctxSampled' c
         <> "baggage"  .= _ctxBaggage c
 
     toJSON c = object
         [ "trace_id" .= ctxTraceID  c
         , "span_id"  .= ctxSpanID   c
-        , "sampled"  .= _ctxSampled c
+        , "sampled"  .= ctxSampled' c
         , "baggage"  .= _ctxBaggage c
         ]
 
@@ -93,10 +87,10 @@ instance ToJSON SimpleContext where
 instance AsCarrier (TextMap SimpleContext) SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
-        fromCtx SimpleContext{..} = TextMap . HashMap.fromList $
+        fromCtx c@SimpleContext{..} = TextMap . HashMap.fromList $
               ("ot-tracer-traceid", review _ID ctxTraceID)
             : ("ot-tracer-spanid" , review _ID ctxSpanID)
-            : ("ot-tracer-sampled", review _Sampled _ctxSampled)
+            : ("ot-tracer-sampled", view (ctxSampled . re _Sampled) c)
             : map (over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = SimpleContext
@@ -125,11 +119,12 @@ instance AsCarrier (HttpHeaders SimpleContext) SimpleContext where
 
 
 data Env = Env
-    { envPRNG :: GenIO
+    { envPRNG     :: GenIO
+    , _envSampler :: Sampler TraceID IO
     }
 
-newEnv :: MonadIO m => m Env
-newEnv = Env <$> liftIO createSystemRandom
+newEnv :: MonadIO m => Sampler TraceID IO -> m Env
+newEnv sampler = Env <$> liftIO createSystemRandom <*> pure sampler
 
 instance MonadIO m => MonadTrace SimpleContext (ReaderT Env m) where
     traceStart = start
@@ -147,20 +142,20 @@ simpleReporter = Interpret id
 -- Internal
 
 start :: (MonadIO m, MonadReader Env m) => SpanOpts Context -> m (Span Context)
-start SpanOpts{..} = do
+start so@SpanOpts{..} = do
     ctx <- case spanOptRefs of
-               []    -> freshContext
+               []    -> freshContext so
                (p:_) -> fromParent p
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
 report :: MonadIO m => FinishedSpan Context -> m ()
 report = liftIO . putStrLn . encodingToLazyByteString . spanE
 
-newTraceID :: MonadIO m => GenIO -> m TraceID
-newTraceID = liftIO . uniform
+newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
+newTraceID = asks envPRNG >>= liftIO . uniform
 
-newSpanID :: MonadIO m => GenIO -> m SpanID
-newSpanID = liftIO . uniform
+newSpanID :: (MonadIO m, MonadReader Env m) => m SpanID
+newSpanID = asks envPRNG >>= liftIO . uniform
 
 _ID :: Prism' Text Word64
 _ID = prism' enc dec
@@ -180,26 +175,31 @@ _Sampled = prism' enc dec
           . Text.decimal
 {-# INLINE _Sampled #-}
 
-freshContext :: (MonadIO m, MonadReader Env m) => m Context
-freshContext = do
-    prng <- asks envPRNG
-    trid <- newTraceID prng
-    spid <- newSpanID  prng
+freshContext :: (MonadIO m, MonadReader Env m) => SpanOpts Context -> m Context
+freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
+    trid <- newTraceID
+    spid <- newSpanID
+    smpl <- asks _envSampler
+
+    sampled <- case spanOptSampled of
+        Nothing         -> liftIO $ smpl trid spanOptOperation
+        Just Sampled    -> pure True
+        Just NotSampled -> pure False
+
     return SimpleContext
         { ctxTraceID  = trid
         , ctxSpanID   = spid
-        , _ctxSampled = Sampled
+        , ctxSampled' = if sampled then Sampled else NotSampled
         , _ctxBaggage = mempty
         }
 
 fromParent :: (MonadIO m, MonadReader Env m) => Reference Context -> m Context
 fromParent p = do
-    prng <- asks envPRNG
-    spid <- newSpanID prng
+    spid <- newSpanID
     return SimpleContext
         { ctxTraceID  = ctxTraceID (refCtx p)
         , ctxSpanID   = spid
-        , _ctxSampled = _ctxSampled (refCtx p)
+        , ctxSampled' = view ctxSampled (refCtx p)
         , _ctxBaggage = mempty
         }
 

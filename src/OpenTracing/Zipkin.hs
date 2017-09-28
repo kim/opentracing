@@ -1,9 +1,12 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE ViewPatterns          #-}
@@ -13,7 +16,6 @@ module OpenTracing.Zipkin
     , ctxTraceID
     , ctxSpanID
     , ctxParentSpanID
-    , ctxSampled
     , ctxFlags
     , ctxBaggage
 
@@ -21,6 +23,7 @@ module OpenTracing.Zipkin
 
     , Env(envPRNG)
     , envTraceID128bit
+    , envSampler
     , newEnv
 
     , zipkinTracer
@@ -30,16 +33,15 @@ module OpenTracing.Zipkin
 where
 
 import           Control.Lens
-import           Control.Monad              (mzero)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import           Data.Bool                  (bool)
 import qualified Data.CaseInsensitive       as CI
 import           Data.Hashable              (Hashable)
 import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as HashMap
 import           Data.HashSet               (HashSet)
 import qualified Data.HashSet               as HashSet
+import           Data.Maybe
 import           Data.Monoid
 import           Data.Text                  (Text, isPrefixOf, toLower)
 import qualified Data.Text                  as Text
@@ -50,7 +52,9 @@ import qualified Data.Text.Read             as TR
 import           Data.Word
 import           GHC.Generics               (Generic)
 import           OpenTracing.Class
-import           OpenTracing.Types
+import           OpenTracing.Sampling
+import           OpenTracing.Types          hiding (Sampled)
+import qualified OpenTracing.Types          as Types
 import           System.Random.MWC
 
 
@@ -62,7 +66,7 @@ data ZTraceID = ZTraceID
     , ztLo :: Word64
     } deriving (Eq, Show, Generic)
 
-instance Hashable  ZTraceID
+instance Hashable ZTraceID
 
 
 data Flag
@@ -72,38 +76,53 @@ data Flag
     | IsRoot
     deriving (Eq, Show, Generic, Ord)
 
-instance Hashable  Flag
+instance Hashable Flag
 
 
 data ZipkinContext = ZipkinContext
     { ctxTraceID      :: TraceID
     , ctxSpanID       :: SpanID
     , ctxParentSpanID :: Maybe SpanID
-    --, ctxIsOwner      :: Bool
-    , _ctxSampled     :: Bool
     , _ctxFlags       :: HashSet Flag
     , _ctxBaggage     :: HashMap Text Text
     } deriving (Eq, Show, Generic)
 
 instance Hashable  ZipkinContext
 
+instance HasSampled ZipkinContext where
+    ctxSampled = lens sa sbt
+      where
+        sa s | HashSet.member Sampled (_ctxFlags s) = Types.Sampled
+             | otherwise                            = Types.NotSampled
+
+        sbt s Types.Sampled    = s { _ctxFlags = HashSet.insert Sampled (_ctxFlags s) }
+        sbt s Types.NotSampled = s { _ctxFlags = HashSet.delete Sampled (_ctxFlags s) }
+
+
 instance AsCarrier (TextMap ZipkinContext) ZipkinContext where
     _Carrier = prism' fromCtx toCtx
       where
-        fromCtx ZipkinContext{..} = TextMap . HashMap.fromList . (>>= maybe mzero return) $
+        fromCtx ZipkinContext{..} = TextMap . HashMap.fromList . catMaybes $
               Just ("x-b3-traceid", review _ID ctxTraceID)
             : Just ("x-b3-spanid" , review _ID ctxSpanID)
             : fmap (("x-b3-parentspanid",) . review _ID) ctxParentSpanID
-            : Just ("x-b3-sampled", if _ctxSampled then "true" else "false")
-            : Just ("x-b3-flags"  , if HashSet.member Debug _ctxFlags then "1" else "0")
+            : Just ("x-b3-sampled", if HashSet.member Sampled _ctxFlags then "true" else "false")
+            : Just ("x-b3-flags"  , if HashSet.member Debug   _ctxFlags then "1"    else "0")
             : map (Just . over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = ZipkinContext
             <$> (HashMap.lookup "x-b3-traceid" m >>= preview _ID)
             <*> (HashMap.lookup "x-b3-spanid"  m >>= preview _ID)
             <*> (Just $ HashMap.lookup "x-b3-parentspanid" m >>= preview _ID)
-            <*> (HashMap.lookup "x-b3-sampled" m >>= preview _Sampled)
-            <*> undefined
+            <*> pure (HashSet.fromList $ catMaybes
+                    [ HashMap.lookup "x-b3-sampled" m
+                        >>= \case "true" -> Just Sampled
+                                  _      -> Nothing
+                    , HashMap.lookup "x-b3-flags" m
+                        >>= \case "1" -> Just Debug
+                                  _   -> Nothing
+                    ]
+                )
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
 
@@ -128,12 +147,14 @@ instance AsCarrier (HttpHeaders ZipkinContext) ZipkinContext where
 data Env = Env
     { envPRNG           :: GenIO
     , _envTraceID128bit :: Bool
+    , _envSampler       :: Sampler TraceID IO
     }
 
-newEnv :: MonadIO m => m Env
-newEnv = Env
+newEnv :: MonadIO m => Sampler TraceID IO -> m Env
+newEnv sampler = Env
     <$> liftIO createSystemRandom
     <*> pure True
+    <*> pure sampler
 
 instance MonadIO m => MonadTrace ZipkinContext (ReaderT Env m) where
     traceStart = start
@@ -142,9 +163,9 @@ zipkinTracer :: Env -> Interpret (MonadTrace ZipkinContext) MonadIO
 zipkinTracer r = Interpret $ \m -> runReaderT m r
 
 start :: (MonadIO m, MonadReader Env m) => SpanOpts ZipkinContext -> m (Span ZipkinContext)
-start SpanOpts{..} = do
+start so@SpanOpts{..} = do
     ctx <- case spanOptRefs of
-               []    -> freshContext
+               []    -> freshContext so
                (p:_) -> fromParent p
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
@@ -183,19 +204,22 @@ instance AsID SpanID where
         dec = either (const Nothing) (pure . fst) . TR.hexadecimal
     {-# INLINE _ID' #-}
 
-_Sampled :: Prism' Text Bool
-_Sampled = prism' (bool "false" "true") (Just . (== "true"))
-
-freshContext :: (MonadIO m, MonadReader Env m) => m ZipkinContext
-freshContext = do
+freshContext :: (MonadIO m, MonadReader Env m) => SpanOpts ZipkinContext -> m ZipkinContext
+freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     trid <- newTraceID
     spid <- newSpanID
+    smpl <- asks _envSampler
+
+    sampled <- case spanOptSampled of
+        Nothing               -> liftIO $ smpl trid spanOptOperation
+        Just Types.Sampled    -> pure True
+        Just Types.NotSampled -> pure False
+
     return ZipkinContext
         { ctxTraceID      = trid
         , ctxSpanID       = spid
         , ctxParentSpanID = Nothing
-        , _ctxSampled     = True
-        , _ctxFlags       = mempty
+        , _ctxFlags       = if sampled then HashSet.singleton Sampled else mempty
         , _ctxBaggage     = mempty
         }
 
@@ -206,7 +230,6 @@ fromParent (refCtx -> p) = do
         { ctxTraceID      = ctxTraceID p
         , ctxSpanID       = spid
         , ctxParentSpanID = Just $ ctxSpanID p
-        , _ctxSampled     = _ctxSampled p
         , _ctxFlags       = _ctxFlags p
         , _ctxBaggage     = mempty
         }
