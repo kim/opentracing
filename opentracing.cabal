@@ -39,7 +39,6 @@ library
     , mtl
     , mwc-random
     , semigroups
-    , serialise
     , stm
     , text
     , time

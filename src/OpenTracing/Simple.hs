@@ -24,7 +24,6 @@ module OpenTracing.Simple
     )
 where
 
-import           Codec.Serialise
 import           Control.Lens               hiding (Context, (.=))
 import           Control.Monad.Reader
 import           Data.Aeson                 hiding (Error)
@@ -55,7 +54,6 @@ data Sampled = Sampled | NotSampled
     deriving (Eq, Show, Read, Generic)
 
 instance Hashable  Sampled
-instance Serialise Sampled
 
 instance ToJSON Sampled where
     toEncoding Sampled    = word8 1
@@ -79,7 +77,6 @@ data SimpleContext = SimpleContext
     } deriving (Eq, Show, Generic)
 
 instance Hashable  SimpleContext
-instance Serialise SimpleContext
 
 instance ToJSON SimpleContext where
     toEncoding c = pairs $

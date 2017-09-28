@@ -29,7 +29,6 @@ module OpenTracing.Zipkin
     )
 where
 
-import           Codec.Serialise
 import           Control.Lens
 import           Control.Monad              (mzero)
 import           Control.Monad.IO.Class
@@ -64,7 +63,6 @@ data ZTraceID = ZTraceID
     } deriving (Eq, Show, Generic)
 
 instance Hashable  ZTraceID
-instance Serialise ZTraceID
 
 
 data Flag
@@ -75,7 +73,6 @@ data Flag
     deriving (Eq, Show, Generic, Ord)
 
 instance Hashable  Flag
-instance Serialise Flag
 
 
 data ZipkinContext = ZipkinContext
@@ -89,7 +86,6 @@ data ZipkinContext = ZipkinContext
     } deriving (Eq, Show, Generic)
 
 instance Hashable  ZipkinContext
-instance Serialise ZipkinContext
 
 instance AsCarrier (TextMap ZipkinContext) ZipkinContext where
     _Carrier = prism' fromCtx toCtx
