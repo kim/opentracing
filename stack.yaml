@@ -1,6 +1,8 @@
 flags:
 extra-package-dbs: []
 packages:
-- .
+- opentracing
+- opentracing-examples
+- opentracing-zipkin
 extra-deps: []
 resolver: nightly-2017-09-20

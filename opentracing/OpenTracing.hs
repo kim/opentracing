@@ -5,8 +5,11 @@
 module OpenTracing
     ( module OpenTracing.Sampling
     , module OpenTracing.Types
+
     , Tracing(..)
+
     , traced
+
     , runTracing
     )
 where
