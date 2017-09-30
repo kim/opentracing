@@ -9,6 +9,7 @@ module OpenTracing
     , Tracing(..)
 
     , traced
+    , traced'
 
     , runTracing
     )
@@ -30,15 +31,25 @@ traced
        , MonadIO     m
        )
     => SpanOpts ctx
-    -> (Span ctx -> m a)
+    -> (Span    ctx -> m a)
     -> m a
-traced opt f = do
-    Tracing{..} <- ask
-    bracket (interpret runTrace $ traceStart opt)
-            (\s -> case view ctxSampled s of
-                Sampled -> do
-                    fs <- interpret runTrace $ traceFinish s
-                    interpret runReport $ traceReport fs
-                NotSampled -> return () -- TODO: record metric
-            )
-            f
+traced opt f = ask >>= \t -> traced' t opt f
+
+traced'
+    :: ( HasSampled ctx
+       , MonadMask  m
+       , MonadIO    m
+       )
+    => Tracing  ctx MonadIO
+    -> SpanOpts ctx
+    -> (Span    ctx -> m a)
+    -> m a
+traced' Tracing{..} opt f = bracket
+    (interpret runTrace $ traceStart opt)
+    (\s -> case view ctxSampled s of
+        Sampled -> do
+            fs <- interpret runTrace $ traceFinish s
+            interpret runReport $ traceReport fs
+        NotSampled -> return () -- TODO: record metric
+    )
+    f

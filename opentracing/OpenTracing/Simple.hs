@@ -84,7 +84,7 @@ instance ToJSON SimpleContext where
         ]
 
 
-instance AsCarrier (TextMap SimpleContext) SimpleContext where
+instance AsCarrier TextMap SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx c@SimpleContext{..} = TextMap . HashMap.fromList $
@@ -100,7 +100,7 @@ instance AsCarrier (TextMap SimpleContext) SimpleContext where
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
 
-instance AsCarrier (HttpHeaders SimpleContext) SimpleContext where
+instance AsCarrier HttpHeaders SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx

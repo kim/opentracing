@@ -77,8 +77,8 @@ import           Data.Time.Clock
 import           Data.Word
 import           GHC.Generics           (Generic)
 import           GHC.Stack
-import           Network.HTTP.Types
-    (Header, Status, StdMethod, renderStdMethod, statusCode)
+import GHC.TypeLits
+import           Network.HTTP.Types     (Header, Method, Status, statusCode)
 import           Prelude                hiding (span)
 
 
@@ -106,12 +106,12 @@ httpHeaders = mempty
 
 
 class AsCarrier a ctx | a -> ctx where
-    _Carrier :: Prism' a ctx
+    _Carrier :: Prism' (a ctx) ctx
 
-traceInject :: AsCarrier a ctx => ctx -> a
+traceInject :: AsCarrier a ctx => ctx -> a ctx
 traceInject = review _Carrier
 
-traceExtract :: AsCarrier a ctx => a -> Maybe ctx
+traceExtract :: AsCarrier a ctx => a ctx -> Maybe ctx
 traceExtract = preview _Carrier
 
 
@@ -206,7 +206,7 @@ data Tag
     | DbType                Text
     | DbUser                Text
     | Error                 Bool
-    | HttpMethod            StdMethod
+    | HttpMethod            Method
     | HttpStatusCode        Status
     | HttpUrl               Text
     | MessageBusDestination Text
@@ -251,7 +251,7 @@ instance ToJSON Tag where
         DbType                x -> toJSON x
         DbUser                x -> toJSON x
         Error                 x -> toJSON x
-        HttpMethod            x -> toJSON . decodeUtf8 . renderStdMethod $ x
+        HttpMethod            x -> toJSON . decodeUtf8 $ x
         HttpStatusCode        x -> toJSON . statusCode $ x
         HttpUrl               x -> toJSON x
         MessageBusDestination x -> toJSON x
@@ -272,7 +272,7 @@ instance ToJSON Tag where
         DbType                x -> text x
         DbUser                x -> text x
         Error                 x -> bool x
-        HttpMethod            x -> text . decodeUtf8 . renderStdMethod $ x
+        HttpMethod            x -> text . decodeUtf8 $ x
         HttpStatusCode        x -> int . statusCode $ x
         HttpUrl               x -> text x
         MessageBusDestination x -> text x

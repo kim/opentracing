@@ -99,7 +99,7 @@ instance HasSampled ZipkinContext where
         sbt s Types.NotSampled = s { _ctxFlags = HashSet.delete Sampled (_ctxFlags s) }
 
 
-instance AsCarrier (TextMap ZipkinContext) ZipkinContext where
+instance AsCarrier TextMap ZipkinContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx ZipkinContext{..} = TextMap . HashMap.fromList . catMaybes $
@@ -126,7 +126,7 @@ instance AsCarrier (TextMap ZipkinContext) ZipkinContext where
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
 
-instance AsCarrier (HttpHeaders ZipkinContext) ZipkinContext where
+instance AsCarrier HttpHeaders ZipkinContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx
