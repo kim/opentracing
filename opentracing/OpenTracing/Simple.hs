@@ -228,6 +228,7 @@ logFieldE f = pairs . pair (logFieldLabel f) $ case f of
     Message    x -> text x
     Stack      x -> string . prettyCallStack $ x
     ErrKind    x -> text x
-    LogField _ x -> string (show x)
+    ErrObj     x -> string . show $ x
+    LogField _ x -> string . show $ x
 
 makeLenses ''SimpleContext

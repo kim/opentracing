@@ -150,6 +150,7 @@ logRecE r = pairs $
         Message    x -> x
         Stack      x -> view packed . prettyCallStack $ x
         ErrKind    x -> x
+        ErrObj     x -> view packed (show x)
         LogField _ x -> view packed (show x)
 
 micros :: POSIXTime -> Word64

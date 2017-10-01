@@ -18,6 +18,7 @@ library
 
   build-depends:
       base
+    , containers
     , lens
     , opentracing
     , text

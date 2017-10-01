@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE StrictData                 #-}
@@ -23,8 +24,15 @@ module OpenTracing.Types
 
     , Span
     , newSpan
+
+    , ActiveSpan
+    , mkActive
+    , modifyActiveSpan
+    , readActiveSpan
+
     , FinishedSpan
     , defaultTraceFinish
+
     , spanContext
     , spanOperation
     , spanStart
@@ -45,7 +53,7 @@ module OpenTracing.Types
     , SpanKinds(..)
     , spanKindLabel
 
-    , LogRecord
+    , LogRecord(..)
     , logTime
     , logFields
 
@@ -58,6 +66,7 @@ module OpenTracing.Types
     )
 where
 
+import           Control.Exception      (Exception)
 import           Control.Lens           hiding (op)
 import           Control.Monad.IO.Class
 import           Data.Aeson             (ToJSON (..), object)
@@ -66,6 +75,7 @@ import           Data.Hashable
 import           Data.HashMap.Strict    (HashMap)
 import           Data.HashSet           (HashSet)
 import qualified Data.HashSet           as HashSet
+import           Data.IORef
 import qualified Data.IP                as IP
 import           Data.List.NonEmpty     (NonEmpty)
 import           Data.Monoid
@@ -77,7 +87,6 @@ import           Data.Time.Clock
 import           Data.Word
 import           GHC.Generics           (Generic)
 import           GHC.Stack
-import GHC.TypeLits
 import           Network.HTTP.Types     (Header, Method, Status, statusCode)
 import           Prelude                hiding (span)
 
@@ -144,6 +153,22 @@ newSpan ctx op rs ts = do
         , _spanRefs      = HashSet.fromList rs
         , _spanLogs      = mempty
         }
+
+
+data ActiveSpan ctx = ActiveSpan
+    { _activeSpan    :: Span ctx
+    , mutActiveSpan :: IORef (Span ctx)
+    }
+
+mkActive :: Span ctx -> IO (ActiveSpan ctx)
+mkActive s = ActiveSpan s <$> newIORef s
+
+modifyActiveSpan :: ActiveSpan ctx -> (Span ctx -> Span ctx) -> IO ()
+modifyActiveSpan ActiveSpan{mutActiveSpan} f
+    = atomicModifyIORef' mutActiveSpan ((,()) . f)
+
+readActiveSpan :: ActiveSpan ctx -> IO (Span ctx)
+readActiveSpan = readIORef . mutActiveSpan
 
 
 data FinishedSpan ctx = FinishedSpan
@@ -310,11 +335,12 @@ data LogRecord = LogRecord
     } deriving Show
 
 data LogField where
-    LogField :: Show a => Text      -> a -> LogField
-    Event    ::           Text           -> LogField
-    Message  ::           Text           -> LogField
-    Stack    ::           CallStack      -> LogField
-    ErrKind  ::           Text           -> LogField
+    LogField :: Show      a => Text      -> a -> LogField
+    Event    ::                Text           -> LogField
+    Message  ::                Text           -> LogField
+    Stack    ::                CallStack      -> LogField
+    ErrKind  ::                Text           -> LogField
+    ErrObj   :: Exception e => e              -> LogField
 
 deriving instance (Show LogField)
 
@@ -324,6 +350,7 @@ logFieldLabel (Event      _) = "event"
 logFieldLabel (Message    _) = "message"
 logFieldLabel (Stack      _) = "stack"
 logFieldLabel (ErrKind    _) = "error.kind"
+logFieldLabel (ErrObj     _) = "error.object"
 
 
 newtype IPv4 = IPv4 { fromIPv4 :: IP.IPv4 }
@@ -358,11 +385,15 @@ instance ToJSON Port where
     toEncoding = word16 . fromPort
 
 makeClassy ''Span
+makeLenses ''ActiveSpan
 makeLenses ''FinishedSpan
 makeLenses ''LogRecord
 
 instance HasSpan (FinishedSpan ctx) ctx where
     span = spanSpan
+
+instance HasSpan (ActiveSpan ctx) ctx where
+    span = activeSpan
 
 instance HasSampled ctx => HasSampled (Span ctx) where
     ctxSampled = spanContext . ctxSampled

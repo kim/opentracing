@@ -4,10 +4,11 @@
 
 module Network.Wai.Middleware.OpenTracing where
 
-import           Control.Lens           (view)
+import           Control.Lens           (over, view)
 import           Control.Monad.IO.Class (MonadIO)
 import           Data.Maybe             (fromMaybe)
 import           Data.Semigroup
+import           Data.Set               (singleton)
 import qualified Data.Text              as Text
 import           Data.Text.Encoding     (decodeUtf8)
 import           Network.Wai
@@ -15,7 +16,7 @@ import           OpenTracing
 import           Prelude                hiding (span)
 
 
-type TracedApplication ctx = Span ctx -> Application
+type TracedApplication ctx = ActiveSpan ctx -> Application
 
 opentracing
     :: ( HasSampled ctx
@@ -24,21 +25,25 @@ opentracing
     => Tracing ctx MonadIO
     -> TracedApplication ctx
     -> Application
-opentracing tracing app = \req respond -> do
+opentracing tracing app req respond = do
     let ctx = traceExtract (HttpHeaders (requestHeaders req))
         opt = SpanOpts
             { spanOptOperation = Text.intercalate "/" (pathInfo req)
             , spanOptRefs      = maybe mempty (\x -> [ChildOf x]) ctx
             , spanOptTags      =
                 [ HttpMethod  (requestMethod req)
-                , HttpUrl     (decodeUtf8 (url req))
+                , HttpUrl     (decodeUtf8 url)
                 , PeerAddress (Text.pack (show (remoteHost req))) -- not so great
                 , SpanKind    RPCServer
                 ]
             , spanOptSampled   = view ctxSampled <$> ctx
             }
-    traced' tracing opt (\span -> app span req respond)
+
+    traced' tracing opt $ \span -> app span req $ \res -> do
+        modifyActiveSpan span $
+            over spanTags (<> singleton (HttpStatusCode (responseStatus res)))
+        respond res
   where
-    url req = "http" <> if isSecure req then "s" else mempty <> "://"
-           <> fromMaybe "localhost" (requestHeaderHost req)
-           <> rawPathInfo req <> rawQueryString req
+    url = "http" <> if isSecure req then "s" else mempty <> "://"
+       <> fromMaybe "localhost" (requestHeaderHost req)
+       <> rawPathInfo req <> rawQueryString req
