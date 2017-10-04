@@ -20,7 +20,7 @@ type TracedApplication ctx = ActiveSpan ctx -> Application
 
 opentracing
     :: ( HasSampled ctx
-       , AsCarrier  HttpHeaders ctx
+       , AsCarrier  HttpHeaders ctx ctx
        )
     => Tracing ctx MonadIO
     -> TracedApplication ctx

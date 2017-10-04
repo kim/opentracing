@@ -114,13 +114,13 @@ httpHeaders :: HttpHeaders ctx
 httpHeaders = mempty
 
 
-class AsCarrier a ctx | a -> ctx where
-    _Carrier :: Prism' (a ctx) ctx
+class AsCarrier a x ctx | a x -> ctx where
+    _Carrier :: Prism' (a x) ctx
 
-traceInject :: AsCarrier a ctx => ctx -> a ctx
+traceInject :: AsCarrier a ctx ctx => ctx -> a ctx
 traceInject = review _Carrier
 
-traceExtract :: AsCarrier a ctx => a ctx -> Maybe ctx
+traceExtract :: AsCarrier a ctx ctx => a ctx -> Maybe ctx
 traceExtract = preview _Carrier
 
 
