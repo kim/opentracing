@@ -20,8 +20,6 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Reader   (MonadReader, ask)
 import Data.List.NonEmpty     (NonEmpty (..))
-import Data.Semigroup
-import Data.Set               (singleton)
 import Data.Time.Clock
 import OpenTracing.Class
 import OpenTracing.Sampling
@@ -54,7 +52,7 @@ traced' t@Tracing{runTrace} opt f = mask $ \unmasked -> do
     ret  <- unmasked (f span) `catchAll` \e -> liftIO $ do
                 now <- getCurrentTime
                 modifyActiveSpan span $
-                      over spanTags (<> singleton (Error True))
+                      over spanTags (setTag (Error True))
                     . over spanLogs (LogRecord now (ErrObj e :| []) :)
                 report t span
                 throwM e

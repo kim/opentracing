@@ -210,7 +210,7 @@ spanE s = pairs $
     <> pair "duration"   (double . realToFrac $ view spanDuration s)
     <> pair "context"    (toEncoding $ view spanContext s)
     <> pair "references" (list refE . toList $ view spanRefs s)
-    <> pair "tags"       (list toEncoding . toList $ view spanTags s)
+    <> pair "tags"       (toEncoding $ view spanTags s)
     <> pair "logs"       (list logRecE . reverse $ view spanLogs s)
 
 refE :: Reference Context -> Encoding

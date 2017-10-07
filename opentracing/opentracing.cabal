@@ -25,6 +25,7 @@ library
       aeson
     , async
     , base
+    , base64-bytestring
     , bytestring
     , case-insensitive
     , containers

@@ -26,7 +26,6 @@ import           Data.Foldable
 import qualified Data.HashSet             as HashSet
 import           Data.Maybe               (catMaybes)
 import           Data.Monoid
-import           Data.Set                 (Set, lookupLT)
 import           Data.Text                (Text)
 import qualified Data.Text                as Text
 import           Data.Text.Lens           (packed)
@@ -113,32 +112,24 @@ spanE loc s = pairs $
             (pair "parentid" . text . review _ID)
             (view (spanContext . to ctxParentSpanID) s)
     <> maybe mempty
-            (pair "kind" . text . spanKindLabel)
-            (view (spanTags . to spanKind) s)
+            (pair "kind" . toEncoding)
+            (view (spanTags . to (getTag SpanKindKey)) s)
     <> pair "timestamp"      (view (spanStart . to utcTimeToPOSIXSeconds . to micros . to word64) s)
     <> pair "duration"       (view (spanDuration . to micros . to word64) s)
     <> pair "debug"          (bool . HashSet.member Debug $ view (spanContext . ctxFlags) s)
     <> pair "localEndpoint"  (toEncoding loc)
-    <> pair "remoteEndpoint" (view (spanTags . to remoteEndpoint . to toEncoding) s)
+    <> pair "remoteEndpoint" (view (spanTags . to remoteEndpoint) s)
     <> pair "annotations"    (list logRecE $ view spanLogs s)
-    <> pair "tags"           (list toEncoding . toList $ view spanTags s)
+    <> pair "tags"           (toEncoding $ view spanTags s)
     -- nb. references are lost, perhaps we should stick them into annotations?
 
-
-spanKind :: Set Tag -> Maybe SpanKinds
-spanKind ts = lookupLT (SomeTag mempty mempty) ts >>= \case
-    SpanKind x -> pure x
-    _          -> Nothing
-
-remoteEndpoint :: Set Tag -> Endpoint
-remoteEndpoint = foldl' matchTag (Endpoint Nothing Nothing Nothing Nothing)
-  where
-    matchTag ep (PeerService s) = ep { serviceName = Just s  }
-    matchTag ep (PeerIPv4   ip) = ep { ipv4        = Just ip }
-    matchTag ep (PeerIPv6   ip) = ep { ipv6        = Just ip }
-    matchTag ep (PeerPort    p) = ep { port        = Just p  }
-
-    matchTag ep _               = ep
+remoteEndpoint :: Tags -> Encoding
+remoteEndpoint ts = pairs . mconcat . catMaybes $
+    [ pair PeerServiceKey . toEncoding <$> getTag PeerServiceKey ts
+    , pair PeerIPv4Key    . toEncoding <$> getTag PeerIPv4Key    ts
+    , pair PeerIPv6Key    . toEncoding <$> getTag PeerIPv6Key    ts
+    , pair PeerPortKey    . toEncoding <$> getTag PeerPortKey    ts
+    ]
 
 logRecE :: LogRecord -> Encoding
 logRecE r = pairs $

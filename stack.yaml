@@ -6,4 +6,4 @@ packages:
 - opentracing-wai
 - opentracing-zipkin
 extra-deps: []
-resolver: nightly-2017-09-20
+resolver: lts-9.6

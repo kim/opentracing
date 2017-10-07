@@ -41,7 +41,7 @@ opentracing tracing app req respond = do
 
     traced' tracing opt $ \span -> app span req $ \res -> do
         modifyActiveSpan span $
-            over spanTags (<> singleton (HttpStatusCode (responseStatus res)))
+            over spanTags (setTag (HttpStatusCode (responseStatus res)))
         respond res
   where
     url = "http" <> if isSecure req then "s" else mempty <> "://"

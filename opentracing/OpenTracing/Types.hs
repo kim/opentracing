@@ -3,13 +3,18 @@
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TupleSections              #-}
+{-# LANGUAGE ViewPatterns               #-}
+
+{-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
 
 module OpenTracing.Types
     ( TextMap(..)
@@ -48,8 +53,51 @@ module OpenTracing.Types
     , spanOpts
 
     , Reference(..)
-    , Tag(..)
-    , tagLabel
+
+    , Tags
+    , Tag
+    , TagVal(..)
+    , setTag
+    , getTag
+
+    , pattern ComponentKey
+    , pattern DbInstanceKey
+    , pattern DbStatementKey
+    , pattern DbTypeKey
+    , pattern DbUserKey
+    , pattern ErrorKey
+    , pattern HttpMethodKey
+    , pattern HttpStatusCodeKey
+    , pattern HttpUrlKey
+    , pattern MessageBusDestinationKey
+    , pattern PeerAddressKey
+    , pattern PeerHostnameKey
+    , pattern PeerIPv4Key
+    , pattern PeerIPv6Key
+    , pattern PeerPortKey
+    , pattern PeerServiceKey
+    , pattern SamplingPriorityKey
+    , pattern SpanKindKey
+
+    , pattern Component
+    , pattern DbInstance
+    , pattern DbStatement
+    , pattern DbType
+    , pattern DbUser
+    , pattern Error
+    , pattern HttpMethod
+    , pattern HttpStatusCode
+    , pattern HttpUrl
+    , pattern MessageBusDestination
+    , pattern PeerAddress
+    , pattern PeerHostname
+    , pattern PeerIPv4
+    , pattern PeerIPv6
+    , pattern PeerPort
+    , pattern PeerService
+    , pattern SamplingPriority
+    , pattern SpanKind
+
     , SpanKinds(..)
     , spanKindLabel
 
@@ -66,29 +114,35 @@ module OpenTracing.Types
     )
 where
 
-import           Control.Exception      (Exception)
-import           Control.Lens           hiding (op)
+import           Control.Exception           (Exception)
+import           Control.Lens                hiding (op)
 import           Control.Monad.IO.Class
-import           Data.Aeson             (ToJSON (..), object)
+import           Data.Aeson                  (ToJSON (..))
 import           Data.Aeson.Encoding
+import qualified Data.ByteString.Base64.Lazy as B64
+import qualified Data.ByteString.Lazy        as Lazy
+import           Data.Foldable
 import           Data.Hashable
-import           Data.HashMap.Strict    (HashMap)
-import           Data.HashSet           (HashSet)
-import qualified Data.HashSet           as HashSet
+import           Data.HashMap.Strict         (HashMap)
+import qualified Data.HashMap.Strict         as HashMap
+import           Data.HashSet                (HashSet)
+import qualified Data.HashSet                as HashSet
+import           Data.Int                    (Int64)
 import           Data.IORef
-import qualified Data.IP                as IP
-import           Data.List.NonEmpty     (NonEmpty)
+import qualified Data.IP                     as IP
+import           Data.List.NonEmpty          (NonEmpty)
 import           Data.Monoid
-import           Data.Set               (Set)
-import qualified Data.Set               as Set
-import           Data.Text              (Text)
-import           Data.Text.Encoding     (decodeUtf8)
+import           Data.Text                   (Text)
+import qualified Data.Text                   as Text
+import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
+import qualified Data.Text.Lazy.Encoding     as Lazy
 import           Data.Time.Clock
 import           Data.Word
-import           GHC.Generics           (Generic)
+import           GHC.Generics                (Generic)
 import           GHC.Stack
-import           Network.HTTP.Types     (Header, Method, Status, statusCode)
-import           Prelude                hiding (span)
+import           Network.HTTP.Types
+import           Prelude                     hiding (span)
+import           Text.Read                   (readMaybe)
 
 
 newtype TextMap ctx = TextMap { fromTextMap :: HashMap Text Text }
@@ -128,20 +182,22 @@ data Span ctx = Span
     { _spanContext   :: ctx
     , _spanOperation :: Text
     , _spanStart     :: UTCTime
-    , _spanTags      :: Set Tag
+    , _spanTags      :: Tags
     , _spanRefs      :: HashSet (Reference ctx)
     , _spanLogs      :: [LogRecord]
     } deriving Show
 
 newSpan
-    :: ( MonadIO  m
-       , Eq       ctx
-       , Hashable ctx
+    :: ( MonadIO     m
+       , Eq          ctx
+       , Hashable    ctx
+       , Foldable    t
+       , Foldable    u
        )
     => ctx
     -> Text
-    -> [Reference ctx]
-    -> [Tag]
+    -> t (Reference ctx)
+    -> u Tag
     -> m (Span ctx)
 newSpan ctx op rs ts = do
     t <- liftIO getCurrentTime
@@ -149,14 +205,14 @@ newSpan ctx op rs ts = do
         { _spanContext   = ctx
         , _spanOperation = op
         , _spanStart     = t
-        , _spanTags      = Set.fromList ts
-        , _spanRefs      = HashSet.fromList rs
+        , _spanTags      = foldMap (`setTag` mempty) ts
+        , _spanRefs      = HashSet.fromList . toList $ rs
         , _spanLogs      = mempty
         }
 
 
 data ActiveSpan ctx = ActiveSpan
-    { _activeSpan    :: Span ctx
+    { _activeSpan   :: Span ctx
     , mutActiveSpan :: IORef (Span ctx)
     }
 
@@ -224,92 +280,201 @@ data Reference ctx
 instance Hashable ctx => Hashable (Reference ctx)
 
 
-data Tag
-    = Component             Text
-    | DbInstance            Text
-    | DbStatement           Text
-    | DbType                Text
-    | DbUser                Text
-    | Error                 Bool
-    | HttpMethod            Method
-    | HttpStatusCode        Status
-    | HttpUrl               Text
-    | MessageBusDestination Text
-    | PeerAddress           Text
-    | PeerHostname          Text
-    | PeerIPv4              IPv4
-    | PeerIPv6              IPv6
-    | PeerPort              Port
-    | PeerService           Text
-    | SamplingPriority      Word8
-    | SpanKind              SpanKinds
+newtype Tags = Tags { fromTags :: HashMap Text TagVal }
+    deriving (Eq, Show, Monoid, ToJSON)
 
-    | SomeTag Text          Text
-    deriving (Eq, Show, Ord)
+type Tag = (Text, TagVal)
 
-tagLabel :: Tag -> Text
-tagLabel (Component             _) = "component"
-tagLabel (DbInstance            _) = "db.instance"
-tagLabel (DbStatement           _) = "db.statement"
-tagLabel (DbType                _) = "db.type"
-tagLabel (DbUser                _) = "db.user"
-tagLabel (Error                 _) = "error"
-tagLabel (HttpMethod            _) = "http.method"
-tagLabel (HttpStatusCode        _) = "http.status_code"
-tagLabel (HttpUrl               _) = "http.url"
-tagLabel (MessageBusDestination _) = "message_bus.destination"
-tagLabel (PeerAddress           _) = "peer.address"
-tagLabel (PeerHostname          _) = "peer.hostname"
-tagLabel (PeerIPv4              _) = "peer.ipv4"
-tagLabel (PeerIPv6              _) = "peer.ipv6"
-tagLabel (PeerPort              _) = "peer.port"
-tagLabel (PeerService           _) = "peer.service"
-tagLabel (SamplingPriority      _) = "sampling.priority"
-tagLabel (SpanKind              _) = "span.kind"
-tagLabel (SomeTag             x _) = x
+data TagVal
+    = BoolT   Bool
+    | StringT Text
+    | IntT    Int64
+    | DoubleT Double
+    | BinaryT Lazy.ByteString
+    deriving (Eq, Show)
 
-instance ToJSON Tag where
-    toJSON     t = object . (:[]) . (tagLabel t,) $ case t of
-        Component             x -> toJSON x
-        DbInstance            x -> toJSON x
-        DbStatement           x -> toJSON x
-        DbType                x -> toJSON x
-        DbUser                x -> toJSON x
-        Error                 x -> toJSON x
-        HttpMethod            x -> toJSON . decodeUtf8 $ x
-        HttpStatusCode        x -> toJSON . statusCode $ x
-        HttpUrl               x -> toJSON x
-        MessageBusDestination x -> toJSON x
-        PeerAddress           x -> toJSON x
-        PeerHostname          x -> toJSON x
-        PeerIPv4              x -> toJSON . show $ x
-        PeerIPv6              x -> toJSON . show $ x
-        PeerPort              x -> toJSON x
-        PeerService           x -> toJSON x
-        SamplingPriority      x -> toJSON x
-        SpanKind              x -> toJSON x
-        SomeTag             _ x -> toJSON x
+instance ToJSON TagVal where
+    toJSON (BoolT   x) = toJSON x
+    toJSON (StringT x) = toJSON x
+    toJSON (IntT    x) = toJSON x
+    toJSON (DoubleT x) = toJSON x
+    toJSON (BinaryT x) = toJSON . Lazy.decodeUtf8 . B64.encode $ x
 
-    toEncoding t = pairs . pair (tagLabel t) $ case t of
-        Component             x -> text x
-        DbInstance            x -> text x
-        DbStatement           x -> text x
-        DbType                x -> text x
-        DbUser                x -> text x
-        Error                 x -> bool x
-        HttpMethod            x -> text . decodeUtf8 $ x
-        HttpStatusCode        x -> int . statusCode $ x
-        HttpUrl               x -> text x
-        MessageBusDestination x -> text x
-        PeerAddress           x -> text x
-        PeerHostname          x -> text x
-        PeerIPv4              x -> string . show $ x
-        PeerIPv6              x -> string . show $ x
-        PeerPort              x -> toEncoding x
-        PeerService           x -> text x
-        SamplingPriority      x -> word8 x
-        SpanKind              x -> toEncoding x
-        SomeTag             _ x -> text x
+    toEncoding (BoolT   x) = toEncoding x
+    toEncoding (StringT x) = toEncoding x
+    toEncoding (IntT    x) = toEncoding x
+    toEncoding (DoubleT x) = toEncoding x
+    toEncoding (BinaryT x) = toEncoding . Lazy.decodeUtf8 . B64.encode $ x
+
+setTag :: Tag -> Tags -> Tags
+setTag (k,v) = Tags . HashMap.insert k v . fromTags
+
+getTag :: Text -> Tags -> Maybe TagVal
+getTag k = HashMap.lookup k . fromTags
+
+pattern ComponentKey             = "component"
+pattern DbInstanceKey            = "db.instance"
+pattern DbStatementKey           = "db.statement"
+pattern DbTypeKey                = "db.type"
+pattern DbUserKey                = "db.user"
+pattern ErrorKey                 = "error"
+pattern HttpMethodKey            = "http.method"
+pattern HttpStatusCodeKey        = "http.status_code"
+pattern HttpUrlKey               = "http.url"
+pattern MessageBusDestinationKey = "message_bus.destination"
+pattern PeerAddressKey           = "peer.address"
+pattern PeerHostnameKey          = "peer.hostname"
+pattern PeerIPv4Key              = "peer.ipv4"
+pattern PeerIPv6Key              = "peer.ipv6"
+pattern PeerPortKey              = "peer.port"
+pattern PeerServiceKey           = "peer.service"
+pattern SamplingPriorityKey      = "sampling.priority"
+pattern SpanKindKey              = "span.kind"
+
+_Component :: Prism' Tag Text
+_Component = prism' ((ComponentKey,) . StringT) $ \case
+    (k, StringT v) | k == ComponentKey -> Just v
+    _ -> Nothing
+
+pattern Component v <- (preview _Component -> Just v) where
+    Component v = review _Component v
+
+_DbInstance :: Prism' Tag Text
+_DbInstance = prism' ((DbInstanceKey,) . StringT) $ \case
+    (k, StringT v) | k == DbInstanceKey -> Just v
+    _ -> Nothing
+
+pattern DbInstance v <- (preview _DbInstance -> Just v) where
+    DbInstance v = review _DbInstance v
+
+_DbStatement :: Prism' Tag Text
+_DbStatement = prism' ((DbStatementKey,) . StringT) $ \case
+    (k, StringT v) | k == DbStatementKey -> Just v
+    _ -> Nothing
+
+pattern DbStatement v <- (preview _DbStatement -> Just v) where
+    DbStatement v = review _DbStatement v
+
+_DbType :: Prism' Tag Text
+_DbType = prism' ((DbTypeKey,) . StringT) $ \case
+    (k, StringT v) | k == DbTypeKey -> Just v
+    _ -> Nothing
+
+pattern DbType v <- (preview _DbType -> Just v) where
+    DbType v = review _DbType v
+
+_DbUser :: Prism' Tag Text
+_DbUser = prism' ((DbUserKey,) . StringT) $ \case
+    (k, StringT v) | k == DbUserKey -> Just v
+    _ -> Nothing
+
+pattern DbUser v <- (preview _DbUser -> Just v) where
+    DbUser v = review _DbUser v
+
+_Error :: Prism' Tag Bool
+_Error = prism' ((ErrorKey,) . BoolT) $ \case
+    (k, BoolT v) | k == ErrorKey -> Just v
+    _ -> Nothing
+
+pattern Error v <- (preview _Error -> Just v) where
+    Error v = review _Error v
+
+_HttpUrl :: Prism' Tag Text
+_HttpUrl = prism' ((HttpUrlKey,) . StringT) $ \case
+    (k, StringT v) | k == HttpUrlKey -> Just v
+    _ -> Nothing
+
+pattern HttpUrl v <- (preview _HttpUrl -> Just v) where
+    HttpUrl v = review _HttpUrl v
+
+_MessageBusDestination :: Prism' Tag Text
+_MessageBusDestination = prism' ((MessageBusDestinationKey,) . StringT) $ \case
+    (k, StringT v) | k == MessageBusDestinationKey -> Just v
+    _ -> Nothing
+
+pattern MessageBusDestination v <- (preview _MessageBusDestination -> Just v) where
+    MessageBusDestination v = review _MessageBusDestination v
+
+_PeerAddress :: Prism' Tag Text
+_PeerAddress = prism' ((PeerAddressKey,) . StringT) $ \case
+    (k, StringT v) | k == PeerAddressKey -> Just v
+    _ -> Nothing
+
+pattern PeerAddress v <- (preview _PeerAddress -> Just v) where
+    PeerAddress v = review _PeerAddress v
+
+_PeerHostname :: Prism' Tag Text
+_PeerHostname = prism' ((PeerHostnameKey,) . StringT) $ \case
+    (k, StringT v) | k == PeerHostnameKey -> Just v
+    _ -> Nothing
+
+pattern PeerHostname v <- (preview _PeerHostname -> Just v) where
+    PeerHostname v = review _PeerHostname v
+
+_PeerService :: Prism' Tag Text
+_PeerService = prism' ((PeerServiceKey,) . StringT) $ \case
+    (k, StringT v) | k == PeerServiceKey -> Just v
+    _ -> Nothing
+
+pattern PeerService v <- (preview _PeerService -> Just v) where
+    PeerService v = review _PeerService v
+
+_HttpMethod :: Prism' Tag Method
+_HttpMethod = prism' ((HttpMethodKey,) . StringT . decodeUtf8) $ \case
+    (k, StringT (encodeUtf8 -> x)) | k == HttpMethodKey ->
+        either (const Nothing) (const (Just x)) $ parseMethod x
+    _ -> Nothing
+
+pattern HttpMethod v <- (preview _HttpMethod -> Just v) where
+    HttpMethod v = review _HttpMethod v
+
+_HttpStatusCode :: Prism' Tag Status
+_HttpStatusCode = prism' ((HttpStatusCodeKey,) . IntT . fromIntegral . statusCode) $ \case
+    (k, IntT x) | k == HttpStatusCodeKey -> Just . toEnum . fromIntegral $ x
+    _ -> Nothing
+
+pattern HttpStatusCode v <- (preview _HttpStatusCode -> Just v) where
+    HttpStatusCode v = review _HttpStatusCode v
+
+_PeerIPv4 :: Prism' Tag IPv4
+_PeerIPv4 = prism' ((PeerIPv4Key,) . StringT . Text.pack . show) $ \case
+    (k, StringT x) | k == PeerIPv4Key -> readMaybe (Text.unpack x)
+    _ -> Nothing
+
+pattern PeerIPv4 v <- (preview _PeerIPv4 -> Just v) where
+    PeerIPv4 v = review _PeerIPv4 v
+
+_PeerIPv6 :: Prism' Tag IPv6
+_PeerIPv6 = prism' ((PeerIPv6Key,) . StringT . Text.pack . show) $ \case
+    (k, StringT x) | k == PeerIPv6Key -> readMaybe (Text.unpack x)
+    _ -> Nothing
+
+pattern PeerIPv6 v <- (preview _PeerIPv6 -> Just v) where
+    PeerIPv6 v = review _PeerIPv6 v
+
+_PeerPort :: Prism' Tag Port
+_PeerPort = prism' ((PeerPortKey,) . IntT . fromIntegral . fromPort) $ \case
+    (k, IntT x) | k == PeerPortKey -> Just . toEnum . fromIntegral $ x
+    _ -> Nothing
+
+pattern PeerPort v <- (preview _PeerPort -> Just v) where
+    PeerPort v = review _PeerPort v
+
+_SamplingPriority :: Prism' Tag Word8
+_SamplingPriority = prism' ((SamplingPriorityKey,) . IntT . fromIntegral) $ \case
+    (k, IntT x) | k == SamplingPriorityKey -> Just . fromIntegral $ x
+    _ -> Nothing
+
+pattern SamplingPriority v <- (preview _SamplingPriority -> Just v) where
+    SamplingPriority v = review _SamplingPriority v
+
+_SpanKind :: Prism' Tag SpanKinds
+_SpanKind = prism' ((SpanKindKey,) . StringT . spanKindLabel) $ \case
+    (k, StringT x) | k == SpanKindKey -> fromSpanKindLabel x
+    _ -> Nothing
+
+pattern SpanKind v <- (preview _SpanKind -> Just v) where
+    SpanKind = review _SpanKind
 
 data SpanKinds
     = RPCClient
@@ -323,6 +488,13 @@ spanKindLabel RPCClient = "client"
 spanKindLabel RPCServer = "server"
 spanKindLabel Producer  = "producer"
 spanKindLabel Consumer  = "consumer"
+
+fromSpanKindLabel :: Text -> Maybe SpanKinds
+fromSpanKindLabel "client"   = Just RPCClient
+fromSpanKindLabel "server"   = Just RPCServer
+fromSpanKindLabel "producer" = Just Producer
+fromSpanKindLabel "consumer" = Just Consumer
+fromSpanKindLabel _          = Nothing
 
 instance ToJSON SpanKinds where
     toJSON     = toJSON . spanKindLabel
