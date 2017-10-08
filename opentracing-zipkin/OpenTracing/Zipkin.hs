@@ -52,9 +52,10 @@ import qualified Data.Text.Read             as TR
 import           Data.Word
 import           GHC.Generics               (Generic)
 import           OpenTracing.Class
+import           OpenTracing.Propagation
 import           OpenTracing.Sampling
-import           OpenTracing.Types          hiding (Sampled)
-import qualified OpenTracing.Types          as Types
+import           OpenTracing.Span           hiding (Sampled)
+import qualified OpenTracing.Span           as Span
 import           System.Random.MWC
 
 
@@ -92,11 +93,11 @@ instance Hashable  ZipkinContext
 instance HasSampled ZipkinContext where
     ctxSampled = lens sa sbt
       where
-        sa s | HashSet.member Sampled (_ctxFlags s) = Types.Sampled
-             | otherwise                            = Types.NotSampled
+        sa s | HashSet.member Sampled (_ctxFlags s) = Span.Sampled
+             | otherwise                            = Span.NotSampled
 
-        sbt s Types.Sampled    = s { _ctxFlags = HashSet.insert Sampled (_ctxFlags s) }
-        sbt s Types.NotSampled = s { _ctxFlags = HashSet.delete Sampled (_ctxFlags s) }
+        sbt s Span.Sampled    = s { _ctxFlags = HashSet.insert Sampled (_ctxFlags s) }
+        sbt s Span.NotSampled = s { _ctxFlags = HashSet.delete Sampled (_ctxFlags s) }
 
 
 instance AsCarrier TextMap ZipkinContext ZipkinContext where
@@ -211,9 +212,9 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     smpl <- asks _envSampler
 
     sampled <- case spanOptSampled of
-        Nothing               -> liftIO $ smpl trid spanOptOperation
-        Just Types.Sampled    -> pure True
-        Just Types.NotSampled -> pure False
+        Nothing              -> liftIO $ smpl trid spanOptOperation
+        Just Span.Sampled    -> pure True
+        Just Span.NotSampled -> pure False
 
     return ZipkinContext
         { ctxTraceID      = trid

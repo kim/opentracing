@@ -8,7 +8,6 @@ import           Control.Lens           (over, view)
 import           Control.Monad.IO.Class (MonadIO)
 import           Data.Maybe             (fromMaybe)
 import           Data.Semigroup
-import           Data.Set               (singleton)
 import qualified Data.Text              as Text
 import           Data.Text.Encoding     (decodeUtf8)
 import           Network.Wai

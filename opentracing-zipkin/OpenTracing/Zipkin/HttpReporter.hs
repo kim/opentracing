@@ -35,6 +35,9 @@ import           GHC.Generics             (Generic)
 import           GHC.Stack                (prettyCallStack)
 import           Network.HTTP.Client      hiding (port)
 import           OpenTracing.Class
+import           OpenTracing.Log
+import           OpenTracing.Span
+import           OpenTracing.Tags
 import           OpenTracing.Types
 import           OpenTracing.Zipkin       hiding (Env, newEnv)
 

@@ -8,7 +8,7 @@ module OpenTracing.Class where
 import           Control.Category
 import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Reader
-import           OpenTracing.Types
+import           OpenTracing.Span
 import           Prelude                hiding (id, (.))
 import qualified Prelude
 

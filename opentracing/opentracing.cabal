@@ -17,8 +17,12 @@ library
   exposed-modules:
       OpenTracing
       OpenTracing.Class
+      OpenTracing.Log
+      OpenTracing.Propagation
       OpenTracing.Sampling
       OpenTracing.Simple
+      OpenTracing.Span
+      OpenTracing.Tags
       OpenTracing.Types
 
   build-depends:
@@ -28,7 +32,6 @@ library
     , base64-bytestring
     , bytestring
     , case-insensitive
-    , containers
     , exceptions
     , hashable
     , http-client

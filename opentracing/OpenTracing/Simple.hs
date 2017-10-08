@@ -46,8 +46,10 @@ import           Data.Word
 import           GHC.Generics               (Generic)
 import           GHC.Stack                  (prettyCallStack)
 import           OpenTracing.Class
+import           OpenTracing.Log
+import           OpenTracing.Propagation
 import           OpenTracing.Sampling
-import           OpenTracing.Types
+import           OpenTracing.Span
 import           Prelude                    hiding (putStrLn)
 import           System.Random.MWC
 

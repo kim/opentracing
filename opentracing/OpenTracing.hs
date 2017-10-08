@@ -3,7 +3,10 @@
 {-# LANGUAGE NamedFieldPuns        #-}
 
 module OpenTracing
-    ( module OpenTracing.Sampling
+    ( module OpenTracing.Propagation
+    , module OpenTracing.Sampling
+    , module OpenTracing.Span
+    , module OpenTracing.Tags
     , module OpenTracing.Types
 
     , Tracing(..)
@@ -18,13 +21,17 @@ where
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Reader   (MonadReader, ask)
-import Data.List.NonEmpty     (NonEmpty (..))
+import Control.Monad.Reader    (MonadReader, ask)
+import Data.List.NonEmpty      (NonEmpty (..))
 import Data.Time.Clock
 import OpenTracing.Class
+import OpenTracing.Log
+import OpenTracing.Propagation
 import OpenTracing.Sampling
+import OpenTracing.Span
+import OpenTracing.Tags
 import OpenTracing.Types
-import Prelude                hiding (span)
+import Prelude                 hiding (span)
 
 
 traced
