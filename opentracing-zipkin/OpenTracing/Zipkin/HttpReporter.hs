@@ -10,12 +10,17 @@
 module OpenTracing.Zipkin.HttpReporter
     ( Env
     , newEnv
+    , closeEnv
+    , withEnv
+
     , zipkinHttpReporter
     )
 where
 
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM
+import           Control.Exception        (AsyncException (ThreadKilled))
+import           Control.Exception.Safe
 import           Control.Lens             hiding (Context)
 import           Control.Monad            (forever, void)
 import           Control.Monad.IO.Class
@@ -60,7 +65,7 @@ instance ToJSON Endpoint where
 
 data Env = Env
     { envQ   :: TQueue (FinishedSpan ZipkinContext)
-    , envRep :: Async () -- TODO: cancel when done
+    , envRep :: Async ()
     }
 
 newEnv :: Endpoint -> String -> Port -> IO Env
@@ -69,6 +74,21 @@ newEnv loc zhost zport = do
     rq  <- parseRequest ("POST " <> zhost <> ":" <> show zport <> "/api/v2")
     mgr <- newManager defaultManagerSettings
     Env q <$> reporter rq mgr loc q
+
+closeEnv :: Env -> IO ()
+closeEnv = cancel . envRep
+
+withEnv
+    :: ( MonadIO   m
+       , MonadMask m
+       )
+    => Endpoint
+    -> String
+    -> Port
+    -> (Env -> m a)
+    -> m a
+withEnv loc zhost zport
+    = bracket (liftIO $ newEnv loc zhost zport) (liftIO . closeEnv)
 
 instance MonadIO m => MonadReport ZipkinContext (ReaderT Env m) where
     traceReport = report
@@ -88,14 +108,21 @@ reporter
     -> Endpoint
     -> TQueue (FinishedSpan ZipkinContext)
     -> IO (Async ())
-reporter rq mgr loc q = async . forever $ do
-    batch <- atomically $ pop 100 q
-    case batch of
-        [] -> void . atomically $ peekTQueue q
-        xs -> void $ httpLbs rq { requestBody = body xs } mgr
+reporter rq mgr loc q = async . handle drain . forever $
+    go (void . atomically $ peekTQueue q)
   where
+    go onEmpty = do
+        batch <- atomically $ pop 100 q
+        case batch of
+            [] -> onEmpty
+            xs -> mask_ $
+                    void (httpLbs rq { requestBody = body xs } mgr)
+                        `catchAny` const (return ()) -- XXX: log something
+
     body = RequestBodyLBS . encodingToLazyByteString . list (spanE loc)
 
+    drain ThreadKilled = go (return ())
+    drain e            = throwM e
 
 pop :: Int -> TQueue a -> STM [a]
 pop 0 _ = pure []
