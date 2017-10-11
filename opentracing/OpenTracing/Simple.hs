@@ -48,7 +48,7 @@ import           GHC.Stack                  (prettyCallStack)
 import           OpenTracing.Class
 import           OpenTracing.Log
 import           OpenTracing.Propagation
-import           OpenTracing.Sampling
+import           OpenTracing.Sampling       (Sampler(runSampler))
 import           OpenTracing.Span
 import           Prelude                    hiding (putStrLn)
 import           System.Random.MWC
@@ -122,11 +122,13 @@ instance AsCarrier HttpHeaders SimpleContext SimpleContext where
 
 data Env = Env
     { envPRNG     :: GenIO
-    , _envSampler :: Sampler TraceID IO
+    , _envSampler :: Sampler
     }
 
-newEnv :: MonadIO m => Sampler TraceID IO -> m Env
-newEnv sampler = Env <$> liftIO createSystemRandom <*> pure sampler
+newEnv :: MonadIO m => Sampler -> m Env
+newEnv samp = do
+    prng <- liftIO createSystemRandom
+    return Env { envPRNG = prng, _envSampler = samp }
 
 instance MonadIO m => MonadTrace SimpleContext (ReaderT Env m) where
     traceStart = start
@@ -184,7 +186,7 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     smpl <- asks _envSampler
 
     sampled <- case spanOptSampled of
-        Nothing         -> liftIO $ smpl trid spanOptOperation
+        Nothing         -> (runSampler smpl) trid spanOptOperation
         Just Sampled    -> pure True
         Just NotSampled -> pure False
 

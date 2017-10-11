@@ -53,9 +53,10 @@ import           Data.Word
 import           GHC.Generics               (Generic)
 import           OpenTracing.Class
 import           OpenTracing.Propagation
-import           OpenTracing.Sampling
+import           OpenTracing.Sampling       (Sampler (runSampler))
 import           OpenTracing.Span           hiding (Sampled)
 import qualified OpenTracing.Span           as Span
+import           OpenTracing.Types          (HasTraceID (..))
 import           System.Random.MWC
 
 
@@ -67,7 +68,10 @@ data ZTraceID = ZTraceID
     , ztLo :: Word64
     } deriving (Eq, Show, Generic)
 
-instance Hashable ZTraceID
+instance Hashable   ZTraceID
+instance HasTraceID ZTraceID where
+    traceIdHi = ztHi
+    traceIdLo = ztLo
 
 
 data Flag
@@ -148,14 +152,17 @@ instance AsCarrier HttpHeaders ZipkinContext ZipkinContext where
 data Env = Env
     { envPRNG           :: GenIO
     , _envTraceID128bit :: Bool
-    , _envSampler       :: Sampler TraceID IO
+    , _envSampler       :: Sampler
     }
 
-newEnv :: MonadIO m => Sampler TraceID IO -> m Env
-newEnv sampler = Env
-    <$> liftIO createSystemRandom
-    <*> pure True
-    <*> pure sampler
+newEnv :: MonadIO m => Sampler -> m Env
+newEnv samp = do
+    prng <- liftIO createSystemRandom
+    return Env
+        { envPRNG           = prng
+        , _envTraceID128bit = True
+        , _envSampler       = samp
+        }
 
 instance MonadIO m => MonadTrace ZipkinContext (ReaderT Env m) where
     traceStart = start
@@ -212,7 +219,7 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     smpl <- asks _envSampler
 
     sampled <- case spanOptSampled of
-        Nothing              -> liftIO $ smpl trid spanOptOperation
+        Nothing              -> (runSampler smpl) trid spanOptOperation
         Just Span.Sampled    -> pure True
         Just Span.NotSampled -> pure False
 

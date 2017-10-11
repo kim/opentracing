@@ -1,7 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module OpenTracing.Types
-    ( IPv4(..)
+    ( HasTraceID(..)
+    , IPv4(..)
     , IPv6(..)
     , Port(..)
     )
@@ -12,6 +13,15 @@ import           Data.Aeson          (ToJSON (..))
 import           Data.Aeson.Encoding
 import qualified Data.IP             as IP
 import           Data.Word
+
+
+class HasTraceID a where
+    traceIdHi :: a -> Maybe Word64
+    traceIdLo :: a -> Word64
+
+instance HasTraceID Word64 where
+    traceIdHi = const Nothing
+    traceIdLo = id
 
 
 newtype IPv4 = IPv4 { fromIPv4 :: IP.IPv4 }
