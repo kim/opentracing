@@ -20,6 +20,7 @@ module OpenTracing.Zipkin
     , ctxBaggage
 
     , Flag(..)
+    , hasFlag
 
     , Env(envPRNG)
     , envTraceID128bit
@@ -72,6 +73,8 @@ instance Hashable   ZTraceID
 instance HasTraceID ZTraceID where
     traceIdHi = ztHi
     traceIdLo = ztLo
+    {-# INLINE traceIdHi #-}
+    {-# INLINE traceIdLo #-}
 
 
 data Flag
@@ -147,6 +150,9 @@ instance AsCarrier HttpHeaders ZipkinContext ZipkinContext where
             . HashMap.fromList
             . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
             . fromHttpHeaders
+
+hasFlag :: Flag -> ZipkinContext -> Bool
+hasFlag f = HashSet.member f . _ctxFlags
 
 
 data Env = Env

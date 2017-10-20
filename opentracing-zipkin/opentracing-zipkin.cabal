@@ -17,25 +17,37 @@ library
   exposed-modules:
       OpenTracing.Zipkin
       OpenTracing.Zipkin.HttpReporter
+      OpenTracing.Zipkin.Thrift
+      OpenTracing.Zipkin.Types
+
+  other-modules:
+      ZipkinCore_Consts
+      ZipkinCore_Types
 
   build-depends:
       aeson
     , async
     , base
+    , bytestring
     , case-insensitive
     , containers
     , hashable
     , http-client
     , http-types
+    , iproute
     , lens
     , mtl
     , mwc-random
     , opentracing
+    , QuickCheck
     , safe-exceptions
     , stm
     , text
+    , thrift
     , time
     , unordered-containers
+    , vector
 
   default-language:  Haskell2010
   ghc-options:       -Wall -funbox-small-strict-fields
+  hs-source-dirs:    src, gen-src

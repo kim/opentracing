@@ -80,7 +80,7 @@ data SpanOpts ctx = SpanOpts
     , spanOptTags      :: [Tag]
     , spanOptSampled   :: Maybe Sampled
     -- ^ Force 'Span' to be sampled (or not).
-    -- 'Nothing' denotes leave decision to 'Sampler'
+    -- 'Nothing' denotes leave decision to 'Sampler' (the default)
     }
 
 spanOpts :: Text -> [Reference ctx] -> SpanOpts ctx

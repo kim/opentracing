@@ -9,7 +9,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
 
 module OpenTracing.Tags
-    ( Tags
+    ( Tags(fromTags)
     , Tag
     , TagVal(..)
     , setTag

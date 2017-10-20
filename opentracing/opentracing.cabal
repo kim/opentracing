@@ -33,6 +33,7 @@ library
     , bytestring
     , case-insensitive
     , clock
+    , containers
     , exceptions
     , hashable
     , http-client

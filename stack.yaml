@@ -5,5 +5,7 @@ packages:
 - opentracing-examples
 - opentracing-wai
 - opentracing-zipkin
-extra-deps: []
+extra-deps:
+- thrift-0.10.0
+allow-newer: true
 resolver: lts-9.6

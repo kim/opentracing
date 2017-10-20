@@ -22,6 +22,8 @@ class HasTraceID a where
 instance HasTraceID Word64 where
     traceIdHi = const Nothing
     traceIdLo = id
+    {-# INLINE traceIdHi #-}
+    {-# INLINE traceIdLo #-}
 
 
 newtype IPv4 = IPv4 { fromIPv4 :: IP.IPv4 }

@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
@@ -14,6 +13,8 @@ module OpenTracing.Zipkin.HttpReporter
     , withEnv
 
     , zipkinHttpReporter
+
+    , Endpoint (..)
     )
 where
 
@@ -28,15 +29,12 @@ import           Control.Monad.Reader
 import           Data.Aeson               hiding (Error)
 import           Data.Aeson.Encoding
 import           Data.Foldable
-import qualified Data.HashSet             as HashSet
 import           Data.Maybe               (catMaybes)
 import           Data.Monoid
-import           Data.Text                (Text)
 import qualified Data.Text                as Text
 import           Data.Text.Lens           (packed)
 import           Data.Time.Clock.POSIX
 import           Data.Word
-import           GHC.Generics             (Generic)
 import           GHC.Stack                (prettyCallStack)
 import           Network.HTTP.Client      hiding (port)
 import           OpenTracing.Class
@@ -45,22 +43,7 @@ import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
 import           OpenTracing.Zipkin       hiding (Env, newEnv)
-
-
-data Endpoint = Endpoint
-    { serviceName :: Maybe Text
-    , ipv4        :: Maybe IPv4
-    , ipv6        :: Maybe IPv6
-    , port        :: Maybe Port
-    } deriving (Eq, Show, Generic)
-
-instance ToJSON Endpoint where
-    toEncoding Endpoint{..} = pairs . mconcat . catMaybes $
-        [ pair "serviceName" . text <$> serviceName
-        , pair "ipv4" . toEncoding  <$> ipv4
-        , pair "ipv6" . toEncoding  <$> ipv6
-        , pair "port" . toEncoding  <$> port
-        ]
+import           OpenTracing.Zipkin.Types
 
 
 data Env = Env
@@ -146,7 +129,7 @@ spanE loc s = pairs $
             (view (spanTags . to (getTag SpanKindKey)) s)
     <> pair "timestamp"      (view (spanStart . to utcTimeToPOSIXSeconds . to micros . to word64) s)
     <> pair "duration"       (view (spanDuration . to micros . to word64) s)
-    <> pair "debug"          (bool . HashSet.member Debug $ view (spanContext . ctxFlags) s)
+    <> pair "debug"          (view (spanContext . to (hasFlag Debug) . to bool) s)
     <> pair "localEndpoint"  (toEncoding loc)
     <> pair "remoteEndpoint" (view (spanTags . to remoteEndpoint) s)
     <> pair "annotations"    (list logRecE $ view spanLogs s)
