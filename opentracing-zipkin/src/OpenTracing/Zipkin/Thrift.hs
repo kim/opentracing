@@ -5,6 +5,9 @@
 
 module OpenTracing.Zipkin.Thrift
     ( toThriftSpan
+
+    , thriftEncodeSpan
+    , thriftEncodeSpans
     )
 where
 
@@ -14,8 +17,8 @@ import           Data.Bits
 import           Data.ByteString.Builder  (toLazyByteString)
 import qualified Data.ByteString.Lazy     as Lazy
 import           Data.ByteString.Lens
-import           Data.Foldable            (foldl')
-import           Data.HashMap.Strict      (toList)
+import           Data.Foldable            (foldl', toList)
+import qualified Data.HashMap.Strict      as HashMap
 import           Data.Int
 import qualified Data.IP                  as IP
 import           Data.List.NonEmpty       (NonEmpty (..))
@@ -64,7 +67,7 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
         $ annFromTags (view spanTags s)
 
     annFromTags :: Tags -> ([Thrift.Annotation], [Thrift.BinaryAnnotation])
-    annFromTags = foldl' go ([],[]) . toList . fromTags
+    annFromTags = foldl' go ([],[]) . HashMap.toList . fromTags
       where
         go acc (SpanKind sk) =
             let ann = Thrift.Annotation
@@ -82,14 +85,11 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
             let (anntyp, annval) = toThriftTag v
                 ann              = Thrift.BinaryAnnotation
                     { Thrift.binaryAnnotation_key             = view lazy k
-                    , Thrift.binaryAnnotation_value           = ser annval
+                    , Thrift.binaryAnnotation_value           = thriftEncodeVal annval
                     , Thrift.binaryAnnotation_annotation_type = anntyp
                     , Thrift.binaryAnnotation_host            = Just loc
                     }
              in second (ann:) acc
-
-
-        ser = Thrift.serializeVal (BinaryProtocol EmptyTransport)
 
     annFromLogs :: [LogRecord] -> [Thrift.Annotation]
     annFromLogs = foldl' go []
@@ -102,6 +102,19 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
                   fields          -> decodeUtf8 . toLazyByteString $ logfmt fields
             }
             : acc
+
+thriftEncodeSpan :: Thrift.Span -> Lazy.ByteString
+thriftEncodeSpan = Thrift.encode_Span (BinaryProtocol EmptyTransport)
+
+thriftEncodeSpans :: Traversable t => t Thrift.Span -> Lazy.ByteString
+thriftEncodeSpans
+    = thriftEncodeVal
+    . TList (T_STRUCT Thrift.typemap_Span)
+    . toList
+    . fmap Thrift.from_Span
+
+thriftEncodeVal :: ThriftVal -> Lazy.ByteString
+thriftEncodeVal = Thrift.serializeVal (BinaryProtocol EmptyTransport)
 
 toThriftTag :: TagVal -> (Thrift.AnnotationType, ThriftVal)
 toThriftTag (BoolT   v) = (Thrift.BOOL, TBool v)
