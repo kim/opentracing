@@ -3,6 +3,7 @@ extra-package-dbs: []
 packages:
 - opentracing
 - opentracing-examples
+- opentracing-http-client
 - opentracing-wai
 - opentracing-zipkin
 extra-deps:
