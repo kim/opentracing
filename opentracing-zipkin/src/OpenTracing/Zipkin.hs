@@ -43,11 +43,7 @@ import qualified Data.HashSet               as HashSet
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Text                  (Text, isPrefixOf, toLower)
-import qualified Data.Text                  as Text
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Lazy.Builder     as TB
-import qualified Data.Text.Lazy.Builder.Int as TB
-import qualified Data.Text.Read             as TR
 import           Data.Word
 import           GHC.Generics               (Generic)
 import           OpenTracing.Class
@@ -95,17 +91,17 @@ instance AsCarrier TextMap ZipkinContext ZipkinContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx ZipkinContext{..} = TextMap . HashMap.fromList . catMaybes $
-              Just ("x-b3-traceid", view (re _Hex . to unHex) ctxTraceID)
-            : Just ("x-b3-spanid" , view (re _Hex . to unHex) ctxSpanID)
-            : fmap (("x-b3-parentspanid",) . view (re _Hex . to unHex)) ctxParentSpanID
+              Just ("x-b3-traceid", view hexText ctxTraceID)
+            : Just ("x-b3-spanid" , view hexText ctxSpanID)
+            : fmap (("x-b3-parentspanid",) . view hexText) ctxParentSpanID
             : Just ("x-b3-sampled", if HashSet.member Sampled _ctxFlags then "true" else "false")
             : Just ("x-b3-flags"  , if HashSet.member Debug   _ctxFlags then "1"    else "0")
             : map (Just . over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = ZipkinContext
-            <$> (HashMap.lookup "x-b3-traceid" m >>= preview _Hex . Hex)
-            <*> (HashMap.lookup "x-b3-spanid"  m >>= preview _Hex . Hex)
-            <*> (Just $ HashMap.lookup "x-b3-parentspanid" m >>= preview _Hex . Hex)
+            <$> (HashMap.lookup "x-b3-traceid" m >>= preview _Hex . knownHex)
+            <*> (HashMap.lookup "x-b3-spanid"  m >>= preview _Hex . knownHex)
+            <*> (Just $ HashMap.lookup "x-b3-parentspanid" m >>= preview _Hex . knownHex)
             <*> pure (HashSet.fromList $ catMaybes
                     [ HashMap.lookup "x-b3-sampled" m
                         >>= \case "true" -> Just Sampled

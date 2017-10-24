@@ -7,8 +7,12 @@ module OpenTracing.Types
     , IPv4(..)
     , IPv6(..)
     , Port(..)
-    , Hex(..)
+
+    , Hex
+    , knownHex
+
     , AsHex(..)
+    , hexText
     )
 where
 
@@ -70,6 +74,9 @@ instance ToJSON Port where
 newtype Hex = Hex { unHex :: Text }
     deriving (Eq, Show, Monoid)
 
+knownHex :: Text -> Hex
+knownHex = Hex
+
 class AsHex a where
     _Hex :: Prism' Hex a
 
@@ -92,3 +99,7 @@ instance AsHex Word64 where
         enc = Hex . view strict . TB.toLazyText . TB.hexadecimal
         dec = either (const Nothing) (pure . fst) . TR.hexadecimal . unHex
     {-# INLINE _Hex #-}
+
+hexText :: AsHex a => Getter a Text
+hexText = re _Hex . to unHex
+{-# INLINE hexText #-}

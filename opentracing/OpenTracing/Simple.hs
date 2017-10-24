@@ -39,8 +39,6 @@ import qualified Data.HashMap.Strict        as HashMap
 import           Data.Monoid
 import           Data.Text                  (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Lazy.Builder     as TB
-import qualified Data.Text.Lazy.Builder.Int as TB
 import qualified Data.Text.Read             as Text
 import           Data.Word
 import           GHC.Generics               (Generic)
@@ -72,17 +70,17 @@ instance HasSampled SimpleContext where
     ctxSampled = lens ctxSampled' (\s a -> s { ctxSampled' = a })
 
 instance ToJSON SimpleContext where
-    toEncoding c = pairs $
-           "trace_id" .= view (re _Hex . to unHex) (ctxTraceID c)
-        <> "span_id"  .= ctxSpanID   c
-        <> "sampled"  .= ctxSampled' c
-        <> "baggage"  .= _ctxBaggage c
+    toEncoding SimpleContext{..} = pairs $
+           "trace_id" .= view hexText ctxTraceID
+        <> "span_id"  .= view hexText ctxSpanID
+        <> "sampled"  .= ctxSampled'
+        <> "baggage"  .= _ctxBaggage
 
-    toJSON c = object
-        [ "trace_id" .= view (re _Hex . to unHex) (ctxTraceID c)
-        , "span_id"  .= ctxSpanID   c
-        , "sampled"  .= ctxSampled' c
-        , "baggage"  .= _ctxBaggage c
+    toJSON SimpleContext{..} = object
+        [ "trace_id" .= view hexText ctxTraceID
+        , "span_id"  .= view hexText ctxSpanID
+        , "sampled"  .= ctxSampled'
+        , "baggage"  .= _ctxBaggage
         ]
 
 
@@ -90,14 +88,14 @@ instance AsCarrier TextMap SimpleContext SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx c@SimpleContext{..} = TextMap . HashMap.fromList $
-              ("ot-tracer-traceid", view (re _Hex . to unHex) ctxTraceID)
-            : ("ot-tracer-spanid" , view (re _Hex . to unHex) ctxSpanID)
+              ("ot-tracer-traceid", view hexText ctxTraceID)
+            : ("ot-tracer-spanid" , view hexText ctxSpanID)
             : ("ot-tracer-sampled", view (ctxSampled . re _Sampled) c)
             : map (over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = SimpleContext
-            <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _Hex . Hex)
-            <*> (HashMap.lookup "ot-tracer-spanid"  m >>= preview _Hex . Hex)
+            <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _Hex . knownHex)
+            <*> (HashMap.lookup "ot-tracer-spanid"  m >>= preview _Hex . knownHex)
             <*> (HashMap.lookup "ot-tracer-sampled" m >>= preview _Sampled)
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
