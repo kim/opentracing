@@ -1,29 +1,38 @@
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 module OpenTracing.Types
-    ( HasTraceID(..)
+    ( TraceID(..)
     , IPv4(..)
     , IPv6(..)
     , Port(..)
+    , Hex(..)
+    , AsHex(..)
     )
 where
 
 import           Control.Lens
-import           Data.Aeson          (ToJSON (..))
+import           Data.Aeson                 (ToJSON (..))
 import           Data.Aeson.Encoding
-import qualified Data.IP             as IP
+import           Data.Hashable              (Hashable)
+import qualified Data.IP                    as IP
+import           Data.Monoid
+import           Data.Text                  (Text)
+import qualified Data.Text                  as Text
+import qualified Data.Text.Lazy.Builder     as TB
+import qualified Data.Text.Lazy.Builder.Int as TB
+import qualified Data.Text.Read             as TR
 import           Data.Word
+import           GHC.Generics               (Generic)
 
 
-class HasTraceID a where
-    traceIdHi :: a -> Maybe Word64
-    traceIdLo :: a -> Word64
+data TraceID = TraceID
+    { traceIdHi :: Maybe Word64
+    , traceIdLo :: Word64
+    } deriving (Eq, Ord, Show, Generic)
 
-instance HasTraceID Word64 where
-    traceIdHi = const Nothing
-    traceIdLo = id
-    {-# INLINE traceIdHi #-}
-    {-# INLINE traceIdLo #-}
+instance Hashable TraceID
 
 
 newtype IPv4 = IPv4 { fromIPv4 :: IP.IPv4 }
@@ -56,3 +65,30 @@ instance Read Port where readsPrec p = map (over _1 Port) . readsPrec p
 instance ToJSON Port where
     toJSON     = toJSON . fromPort
     toEncoding = word16 . fromPort
+
+
+newtype Hex = Hex { unHex :: Text }
+    deriving (Eq, Show, Monoid)
+
+class AsHex a where
+    _Hex :: Prism' Hex a
+
+instance AsHex TraceID where
+    _Hex = prism' enc dec
+      where
+        enc (TraceID hi lo)
+            = Hex . unHex $ maybe mempty (review _Hex) hi <> review _Hex lo
+
+        dec (Hex t)
+            = case Text.splitAt 16 t of
+                  ("", lo) -> TraceID Nothing <$> preview _Hex (Hex lo)
+                  (hi, lo) -> TraceID <$> Just (preview _Hex (Hex hi))
+                                      <*> preview _Hex (Hex lo)
+    {-# INLINE _Hex #-}
+
+instance AsHex Word64 where
+    _Hex = prism' enc dec
+      where
+        enc = Hex . view strict . TB.toLazyText . TB.hexadecimal
+        dec = either (const Nothing) (pure . fst) . TR.hexadecimal . unHex
+    {-# INLINE _Hex #-}

@@ -144,10 +144,10 @@ pop n q = do
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan ZipkinContext -> Encoding
 spanE loc logfmt s = pairs $
        pair "name"           (view (spanOperation . to text) s)
-    <> pair "id"             (view (spanContext . to ctxSpanID  . re _ID . to text) s)
-    <> pair "traceId"        (view (spanContext . to ctxTraceID . re _ID . to text) s)
+    <> pair "id"             (view (spanContext . to ctxSpanID  . re _Hex . to unHex . to text) s)
+    <> pair "traceId"        (view (spanContext . to ctxTraceID . re _Hex . to unHex . to text) s)
     <> maybe mempty
-            (pair "parentid" . text . review _ID)
+            (pair "parentid" . text . view (re _Hex . to unHex))
             (view (spanContext . to ctxParentSpanID) s)
     <> maybe mempty
             (pair "kind" . toEncoding)

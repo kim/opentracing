@@ -48,13 +48,13 @@ import           GHC.Stack                  (prettyCallStack)
 import           OpenTracing.Class
 import           OpenTracing.Log
 import           OpenTracing.Propagation
-import           OpenTracing.Sampling       (Sampler(runSampler))
+import           OpenTracing.Sampling       (Sampler (runSampler))
 import           OpenTracing.Span
+import           OpenTracing.Types
 import           Prelude                    hiding (putStrLn)
 import           System.Random.MWC
 
 
-type TraceID = Word64
 type SpanID  = Word64
 
 type Context = SimpleContext
@@ -73,13 +73,13 @@ instance HasSampled SimpleContext where
 
 instance ToJSON SimpleContext where
     toEncoding c = pairs $
-           "trace_id" .= ctxTraceID  c
+           "trace_id" .= view (re _Hex . to unHex) (ctxTraceID c)
         <> "span_id"  .= ctxSpanID   c
         <> "sampled"  .= ctxSampled' c
         <> "baggage"  .= _ctxBaggage c
 
     toJSON c = object
-        [ "trace_id" .= ctxTraceID  c
+        [ "trace_id" .= view (re _Hex . to unHex) (ctxTraceID c)
         , "span_id"  .= ctxSpanID   c
         , "sampled"  .= ctxSampled' c
         , "baggage"  .= _ctxBaggage c
@@ -90,14 +90,14 @@ instance AsCarrier TextMap SimpleContext SimpleContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx c@SimpleContext{..} = TextMap . HashMap.fromList $
-              ("ot-tracer-traceid", review _ID ctxTraceID)
-            : ("ot-tracer-spanid" , review _ID ctxSpanID)
+              ("ot-tracer-traceid", view (re _Hex . to unHex) ctxTraceID)
+            : ("ot-tracer-spanid" , view (re _Hex . to unHex) ctxSpanID)
             : ("ot-tracer-sampled", view (ctxSampled . re _Sampled) c)
             : map (over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = SimpleContext
-            <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _ID)
-            <*> (HashMap.lookup "ot-tracer-spanid"  m >>= preview _ID)
+            <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _Hex . Hex)
+            <*> (HashMap.lookup "ot-tracer-spanid"  m >>= preview _Hex . Hex)
             <*> (HashMap.lookup "ot-tracer-sampled" m >>= preview _Sampled)
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
@@ -156,17 +156,10 @@ report :: MonadIO m => FinishedSpan Context -> m ()
 report = liftIO . putStrLn . encodingToLazyByteString . spanE
 
 newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
-newTraceID = asks envPRNG >>= liftIO . uniform
+newTraceID = asks envPRNG >>= fmap (TraceID Nothing) . liftIO . uniform
 
 newSpanID :: (MonadIO m, MonadReader Env m) => m SpanID
 newSpanID = asks envPRNG >>= liftIO . uniform
-
-_ID :: Prism' Text Word64
-_ID = prism' enc dec
-  where
-    enc = view strict . TB.toLazyText . TB.decimal
-    dec = either (const Nothing) (pure . fst) . Text.decimal
-{-# INLINE _ID #-}
 
 _Sampled :: Prism' Text Sampled
 _Sampled = prism' enc dec

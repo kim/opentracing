@@ -28,8 +28,6 @@ module OpenTracing.Zipkin
     , newEnv
 
     , zipkinTracer
-
-    , _ID
     )
 where
 
@@ -57,25 +55,11 @@ import           OpenTracing.Propagation
 import           OpenTracing.Sampling       (Sampler (runSampler))
 import           OpenTracing.Span           hiding (Sampled)
 import qualified OpenTracing.Span           as Span
-import           OpenTracing.Types          (HasTraceID (..))
+import           OpenTracing.Types
 import           System.Random.MWC
 
 
-type TraceID = ZTraceID
 type SpanID  = Word64
-
-data ZTraceID = ZTraceID
-    { ztHi :: Maybe Word64
-    , ztLo :: Word64
-    } deriving (Eq, Show, Generic)
-
-instance Hashable   ZTraceID
-instance HasTraceID ZTraceID where
-    traceIdHi = ztHi
-    traceIdLo = ztLo
-    {-# INLINE traceIdHi #-}
-    {-# INLINE traceIdLo #-}
-
 
 data Flag
     = Debug
@@ -111,17 +95,17 @@ instance AsCarrier TextMap ZipkinContext ZipkinContext where
     _Carrier = prism' fromCtx toCtx
       where
         fromCtx ZipkinContext{..} = TextMap . HashMap.fromList . catMaybes $
-              Just ("x-b3-traceid", review _ID ctxTraceID)
-            : Just ("x-b3-spanid" , review _ID ctxSpanID)
-            : fmap (("x-b3-parentspanid",) . review _ID) ctxParentSpanID
+              Just ("x-b3-traceid", view (re _Hex . to unHex) ctxTraceID)
+            : Just ("x-b3-spanid" , view (re _Hex . to unHex) ctxSpanID)
+            : fmap (("x-b3-parentspanid",) . view (re _Hex . to unHex)) ctxParentSpanID
             : Just ("x-b3-sampled", if HashSet.member Sampled _ctxFlags then "true" else "false")
             : Just ("x-b3-flags"  , if HashSet.member Debug   _ctxFlags then "1"    else "0")
             : map (Just . over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
         toCtx (TextMap m) = ZipkinContext
-            <$> (HashMap.lookup "x-b3-traceid" m >>= preview _ID)
-            <*> (HashMap.lookup "x-b3-spanid"  m >>= preview _ID)
-            <*> (Just $ HashMap.lookup "x-b3-parentspanid" m >>= preview _ID)
+            <$> (HashMap.lookup "x-b3-traceid" m >>= preview _Hex . Hex)
+            <*> (HashMap.lookup "x-b3-spanid"  m >>= preview _Hex . Hex)
+            <*> (Just $ HashMap.lookup "x-b3-parentspanid" m >>= preview _Hex . Hex)
             <*> pure (HashSet.fromList $ catMaybes
                     [ HashMap.lookup "x-b3-sampled" m
                         >>= \case "true" -> Just Sampled
@@ -191,32 +175,10 @@ newTraceID = do
           else
               pure Nothing
     lo <- liftIO $ uniform envPRNG
-    return ZTraceID { ztHi = hi, ztLo = lo }
+    return TraceID { traceIdHi = hi, traceIdLo = lo }
 
 newSpanID :: (MonadIO m, MonadReader Env m) => m SpanID
 newSpanID = ask >>= liftIO . uniform . envPRNG
-
-_ID :: AsID a => Prism' Text a
-_ID = _ID'
-
-class AsID a where
-    _ID' :: Prism' Text a
-
-instance AsID TraceID where
-    _ID' = prism' enc dec
-      where
-        enc (ZTraceID hi lo) = maybe mempty (review _ID') hi <> review _ID' lo
-        dec t = case Text.splitAt 16 t of
-                    ("", lo) -> ZTraceID Nothing <$> preview _ID' lo
-                    (hi, lo) -> ZTraceID <$> Just (preview _ID' hi) <*> preview _ID' lo
-    {-# INLINE _ID' #-}
-
-instance AsID SpanID where
-    _ID' = prism' enc dec
-      where
-        enc = view strict . TB.toLazyText . TB.hexadecimal
-        dec = either (const Nothing) (pure . fst) . TR.hexadecimal
-    {-# INLINE _ID' #-}
 
 freshContext :: (MonadIO m, MonadReader Env m) => SpanOpts ZipkinContext -> m ZipkinContext
 freshContext SpanOpts{spanOptOperation,spanOptSampled} = do

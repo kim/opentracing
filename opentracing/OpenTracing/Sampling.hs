@@ -18,12 +18,12 @@ where
 import Control.Monad.IO.Class
 import Data.IORef
 import Data.Text              (Text)
-import OpenTracing.Types      (HasTraceID (..))
+import OpenTracing.Types      (TraceID (..))
 import System.Clock
 
 
 newtype Sampler = Sampler
-    { runSampler :: forall t m. (HasTraceID t, MonadIO m) => t -> Text -> m Bool
+    { runSampler :: forall m. MonadIO m => TraceID -> Text -> m Bool
     }
 
 constSampler :: Bool -> Sampler
