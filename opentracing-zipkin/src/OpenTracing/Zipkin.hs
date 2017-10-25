@@ -34,23 +34,24 @@ where
 import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import qualified Data.CaseInsensitive       as CI
-import           Data.Hashable              (Hashable)
-import           Data.HashMap.Strict        (HashMap)
-import qualified Data.HashMap.Strict        as HashMap
-import           Data.HashSet               (HashSet)
-import qualified Data.HashSet               as HashSet
+import           Data.Bool               (bool)
+import qualified Data.CaseInsensitive    as CI
+import           Data.Hashable           (Hashable)
+import           Data.HashMap.Strict     (HashMap)
+import qualified Data.HashMap.Strict     as HashMap
+import           Data.HashSet            (HashSet)
+import qualified Data.HashSet            as HashSet
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Text                  (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
+import           Data.Text               (Text, isPrefixOf, toLower)
+import           Data.Text.Encoding      (decodeUtf8, encodeUtf8)
 import           Data.Word
-import           GHC.Generics               (Generic)
+import           GHC.Generics            (Generic)
 import           OpenTracing.Class
 import           OpenTracing.Propagation
-import           OpenTracing.Sampling       (Sampler (runSampler))
-import           OpenTracing.Span           hiding (Sampled)
-import qualified OpenTracing.Span           as Span
+import           OpenTracing.Sampling    (Sampler (runSampler))
+import           OpenTracing.Span        hiding (Sampled)
+import qualified OpenTracing.Span        as Span
 import           OpenTracing.Types
 import           System.Random.MWC
 
@@ -182,16 +183,15 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     spid <- newSpanID
     smpl <- asks _envSampler
 
-    sampled <- case spanOptSampled of
-        Nothing              -> (runSampler smpl) trid spanOptOperation
-        Just Span.Sampled    -> pure True
-        Just Span.NotSampled -> pure False
+    flags <- bool mempty (HashSet.singleton Sampled) <$> case spanOptSampled of
+        Nothing -> (runSampler smpl) trid spanOptOperation
+        Just s  -> pure $ review sampled s
 
     return ZipkinContext
         { ctxTraceID      = trid
         , ctxSpanID       = spid
         , ctxParentSpanID = Nothing
-        , _ctxFlags       = if sampled then HashSet.singleton Sampled else mempty
+        , _ctxFlags       = flags
         , _ctxBaggage     = mempty
         }
 

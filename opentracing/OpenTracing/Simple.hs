@@ -176,15 +176,14 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     spid <- newSpanID
     smpl <- asks _envSampler
 
-    sampled <- case spanOptSampled of
-        Nothing         -> (runSampler smpl) trid spanOptOperation
-        Just Sampled    -> pure True
-        Just NotSampled -> pure False
+    sampled' <- case spanOptSampled of
+        Nothing -> view sampled <$> (runSampler smpl) trid spanOptOperation
+        Just s  -> pure s
 
     return SimpleContext
         { ctxTraceID  = trid
         , ctxSpanID   = spid
-        , ctxSampled' = if sampled then Sampled else NotSampled
+        , ctxSampled' = sampled'
         , _ctxBaggage = mempty
         }
 

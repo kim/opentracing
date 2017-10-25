@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE NamedFieldPuns         #-}
 {-# LANGUAGE TemplateHaskell        #-}
@@ -33,13 +34,15 @@ module OpenTracing.Span
 
     , Sampled(..)
     , HasSampled(..)
+    , sampled
     )
 where
 
 import           Control.Lens           hiding (op)
 import           Control.Monad.IO.Class
 import           Data.Aeson             (ToJSON (..))
-import           Data.Aeson.Encoding
+import           Data.Aeson.Encoding    hiding (bool)
+import           Data.Bool              (bool)
 import           Data.Foldable
 import           Data.Hashable
 import           Data.HashSet           (HashSet)
@@ -65,6 +68,10 @@ instance ToJSON Sampled where
 class HasSampled ctx where
     ctxSampled :: Lens' ctx Sampled
 
+sampled :: Iso' Bool Sampled
+sampled = iso (bool NotSampled Sampled) $ \case
+    Sampled    -> True
+    NotSampled -> False
 
 data Reference ctx
     = ChildOf     { refCtx :: ctx }
