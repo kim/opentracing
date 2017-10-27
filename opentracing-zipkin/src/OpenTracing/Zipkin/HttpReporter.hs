@@ -67,12 +67,12 @@ newEnv api loc zhost zport logfmt = do
         let rqBase = "POST http://" <> zhost <> ":" <> show zport
         case api of
             V1 -> do
-                rq <- parseRequest $ rqBase <> "/api/v1"
+                rq <- parseRequest $ rqBase <> "/api/v1/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/x-thrift")]
                     }
             V2 -> do
-                rq <- parseRequest $ rqBase <> "/api/v2"
+                rq <- parseRequest $ rqBase <> "/api/v2/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/json")]
                     }
@@ -122,7 +122,7 @@ reporter api rq mgr loc q logfmt = async . handle drain . forever $
         case batch of
             [] -> onEmpty
             xs -> mask_ $
-                    void (httpLbs rq { requestBody = body xs } mgr)
+                    void (httpLbs rq { requestBody = body xs } mgr) -- XXX: check response status
                         `catchAny` const (return ()) -- XXX: log something
 
     body xs = RequestBodyLBS $ case api of
@@ -156,18 +156,24 @@ spanE loc logfmt s = pairs $
     <> pair "duration"       (view (spanDuration . to micros . to word64) s)
     <> pair "debug"          (view (spanContext . to (hasFlag Debug) . to bool) s)
     <> pair "localEndpoint"  (toEncoding loc)
-    <> pair "remoteEndpoint" (view (spanTags . to remoteEndpoint) s)
+    <> maybe mempty
+             (pair "remoteEndpoint")
+             (view (spanTags . to remoteEndpoint) s)
     <> pair "annotations"    (list (logRecE logfmt) $ view spanLogs s)
     <> pair "tags"           (toEncoding $ view spanTags s)
     -- nb. references are lost, perhaps we should stick them into annotations?
 
-remoteEndpoint :: Tags -> Encoding
-remoteEndpoint ts = pairs . mconcat . catMaybes $
-    [ pair PeerServiceKey . toEncoding <$> getTag PeerServiceKey ts
-    , pair PeerIPv4Key    . toEncoding <$> getTag PeerIPv4Key    ts
-    , pair PeerIPv6Key    . toEncoding <$> getTag PeerIPv6Key    ts
-    , pair PeerPortKey    . toEncoding <$> getTag PeerPortKey    ts
-    ]
+remoteEndpoint :: Tags -> Maybe Encoding
+remoteEndpoint ts = case fields of
+    [] -> Nothing
+    xs -> Just . pairs $ mconcat xs
+  where
+    fields = catMaybes
+        [ pair PeerServiceKey . toEncoding <$> getTag PeerServiceKey ts
+        , pair PeerIPv4Key    . toEncoding <$> getTag PeerIPv4Key    ts
+        , pair PeerIPv6Key    . toEncoding <$> getTag PeerIPv6Key    ts
+        , pair PeerPortKey    . toEncoding <$> getTag PeerPortKey    ts
+        ]
 
 logRecE :: LogFieldsFormatter -> LogRecord -> Encoding
 logRecE logfmt r = pairs $
