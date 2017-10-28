@@ -147,7 +147,7 @@ spanE loc logfmt s = pairs $
     <> pair "id"             (view (spanContext . to ctxSpanID  . hexText . to text) s)
     <> pair "traceId"        (view (spanContext . to ctxTraceID . hexText . to text) s)
     <> maybe mempty
-            (pair "parentid" . text . view hexText)
+            (pair "parentId" . text . view hexText)
             (view (spanContext . to ctxParentSpanID) s)
     <> maybe mempty
             (pair "kind" . toEncoding)
