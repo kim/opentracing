@@ -280,16 +280,16 @@ data SpanKinds
     deriving (Eq, Show, Ord)
 
 spanKindLabel :: SpanKinds -> Text
-spanKindLabel RPCClient = "client"
-spanKindLabel RPCServer = "server"
-spanKindLabel Producer  = "producer"
-spanKindLabel Consumer  = "consumer"
+spanKindLabel RPCClient = "CLIENT"
+spanKindLabel RPCServer = "SERVER"
+spanKindLabel Producer  = "PRODUCER"
+spanKindLabel Consumer  = "CONSUMER"
 
 fromSpanKindLabel :: Text -> Maybe SpanKinds
-fromSpanKindLabel "client"   = Just RPCClient
-fromSpanKindLabel "server"   = Just RPCServer
-fromSpanKindLabel "producer" = Just Producer
-fromSpanKindLabel "consumer" = Just Consumer
+fromSpanKindLabel "CLIENT"   = Just RPCClient
+fromSpanKindLabel "SERVER"   = Just RPCServer
+fromSpanKindLabel "PRODUCER" = Just Producer
+fromSpanKindLabel "CONSUMER" = Just Consumer
 fromSpanKindLabel _          = Nothing
 
 instance ToJSON SpanKinds where
