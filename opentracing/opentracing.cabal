@@ -20,9 +20,10 @@ library
       OpenTracing.Log
       OpenTracing.Propagation
       OpenTracing.Sampling
-      OpenTracing.Simple
       OpenTracing.Span
+      OpenTracing.Standard
       OpenTracing.Tags
+      OpenTracing.Time
       OpenTracing.Types
 
   build-depends:

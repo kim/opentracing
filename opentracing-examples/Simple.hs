@@ -7,13 +7,13 @@ import Control.Concurrent     (threadDelay)
 import Control.Lens           (view)
 import Control.Monad.IO.Class
 import OpenTracing
-import OpenTracing.Simple
+import OpenTracing.Standard
 
 
 main :: IO ()
 main = do
     env <- newEnv (constSampler True)
-    runTracing (Tracing (simpleTracer env) simpleReporter) $
+    runTracing (Tracing (stdTracer env) stdReporter) $
         traced (spanOpts "hello" mempty          ) $ \parent ->
         traced (spanOpts "world" [childOf parent]) $ \_child -> do
             liftIO $ do

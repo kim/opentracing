@@ -20,32 +20,31 @@ module OpenTracing.Zipkin.HttpReporter
     )
 where
 
-import           Control.Concurrent.Async
-import           Control.Concurrent.STM
-import           Control.Exception         (AsyncException (ThreadKilled))
-import           Control.Exception.Safe
-import           Control.Lens              hiding (Context)
-import           Control.Monad             (forever, void)
-import           Control.Monad.IO.Class
-import           Control.Monad.Reader
-import           Data.Aeson                hiding (Error)
-import           Data.Aeson.Encoding
-import           Data.ByteString.Builder   (toLazyByteString)
-import           Data.Maybe                (catMaybes)
-import           Data.Monoid
-import           Data.Text.Lazy.Encoding   (decodeUtf8)
-import           Data.Time.Clock.POSIX     (POSIXTime, utcTimeToPOSIXSeconds)
-import           Data.Word
-import           Network.HTTP.Client       hiding (port)
-import           Network.HTTP.Types        (hContentType)
-import           OpenTracing.Class
-import           OpenTracing.Log
-import           OpenTracing.Span
-import           OpenTracing.Tags
-import           OpenTracing.Types
-import           OpenTracing.Zipkin        hiding (Env, newEnv)
-import           OpenTracing.Zipkin.Thrift
-import           OpenTracing.Zipkin.Types
+import Control.Concurrent.Async
+import Control.Concurrent.STM
+import Control.Exception         (AsyncException (ThreadKilled))
+import Control.Exception.Safe
+import Control.Lens              hiding (Context)
+import Control.Monad             (forever, void)
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Data.Aeson                hiding (Error)
+import Data.Aeson.Encoding
+import Data.ByteString.Builder   (toLazyByteString)
+import Data.Maybe                (catMaybes)
+import Data.Monoid
+import Data.Text.Lazy.Encoding   (decodeUtf8)
+import Network.HTTP.Client       hiding (port)
+import Network.HTTP.Types        (hContentType)
+import OpenTracing.Class
+import OpenTracing.Log
+import OpenTracing.Span
+import OpenTracing.Tags
+import OpenTracing.Time
+import OpenTracing.Types
+import OpenTracing.Zipkin        hiding (Env, newEnv)
+import OpenTracing.Zipkin.Thrift
+import OpenTracing.Zipkin.Types
 
 
 data API = V1 | V2
@@ -152,8 +151,8 @@ spanE loc logfmt s = pairs $
     <> maybe mempty
             (pair "kind" . toEncoding)
             (view (spanTags . to (getTag SpanKindKey)) s)
-    <> pair "timestamp"      (view (spanStart . to utcTimeToPOSIXSeconds . to micros . to word64) s)
-    <> pair "duration"       (view (spanDuration . to micros . to word64) s)
+    <> pair "timestamp"      (view (spanStart . to microsE) s)
+    <> pair "duration"       (view (spanDuration . to microsE) s)
     <> pair "debug"          (view (spanContext . to (hasFlag Debug) . to bool) s)
     <> pair "localEndpoint"  (toEncoding loc)
     <> maybe mempty
@@ -177,8 +176,8 @@ remoteEndpoint ts = case fields of
 
 logRecE :: LogFieldsFormatter -> LogRecord -> Encoding
 logRecE logfmt r = pairs $
-       pair "timestamp" (view (logTime . to utcTimeToPOSIXSeconds . to micros . to word64) r)
+       pair "timestamp" (view (logTime . to microsE) r)
     <> pair "value"     (lazyText . decodeUtf8 . toLazyByteString . logfmt $ view logFields r)
 
-micros :: POSIXTime -> Word64
-micros = round . (1000000 *)
+microsE :: AsMicros a => a -> Encoding
+microsE = word64 . micros

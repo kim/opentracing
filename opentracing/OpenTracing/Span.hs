@@ -11,6 +11,8 @@ module OpenTracing.Span
     ( Span
     , newSpan
 
+    , HasSpan
+
     , ActiveSpan
     , mkActive
     , modifyActiveSpan
@@ -31,6 +33,10 @@ module OpenTracing.Span
     , spanOpts
 
     , Reference(..)
+    , findParent
+
+    , HasContext
+    , context
 
     , Sampled(..)
     , HasSampled(..)
@@ -79,6 +85,16 @@ data Reference ctx
     deriving (Eq, Show, Generic)
 
 instance Hashable ctx => Hashable (Reference ctx)
+
+findParent :: Foldable t => t (Reference ctx) -> Maybe (Reference ctx)
+findParent = foldl' go Nothing
+  where
+    go Nothing  y = Just y
+    go (Just x) y = Just $ case prec x y of { LT -> y; _ -> x }
+
+    prec (ChildOf     _) (FollowsFrom _) = GT
+    prec (FollowsFrom _) (ChildOf     _) = LT
+    prec _               _               = EQ
 
 
 data SpanOpts ctx = SpanOpts
@@ -140,8 +156,8 @@ mkActive :: Span ctx -> IO (ActiveSpan ctx)
 mkActive s = ActiveSpan s <$> newIORef s
 
 modifyActiveSpan :: ActiveSpan ctx -> (Span ctx -> Span ctx) -> IO ()
-modifyActiveSpan ActiveSpan{mutActiveSpan} f
-    = atomicModifyIORef' mutActiveSpan ((,()) . f)
+modifyActiveSpan ActiveSpan{mutActiveSpan} f =
+    atomicModifyIORef' mutActiveSpan ((,()) . f)
 
 readActiveSpan :: ActiveSpan ctx -> IO (Span ctx)
 readActiveSpan = readIORef . mutActiveSpan
@@ -163,6 +179,30 @@ defaultTraceFinish s = do
 makeClassy ''Span
 makeLenses ''ActiveSpan
 makeLenses ''FinishedSpan
+
+class HasContext s t a b | s -> a, t -> b where
+    context :: Lens s t a b
+
+instance (Eq ctx', Hashable ctx') => HasContext (Span ctx) (Span ctx') ctx ctx' where
+    context = lens sa sbt
+      where
+        sa = _spanContext
+
+        sbt s b = s
+            { _spanContext = b
+            , _spanRefs    = HashSet.map (set context b) $ _spanRefs s
+            }
+
+instance (Eq ctx', Hashable ctx') => HasContext (FinishedSpan ctx) (FinishedSpan ctx') ctx ctx' where
+    context = lens sa sbt
+      where
+        sa = view spanContext
+
+        sbt s b = s { _spanSpan = set context b (_spanSpan s) }
+
+instance HasContext (Reference ctx) (Reference ctx') ctx ctx' where
+    context = lens refCtx (\s b -> s { refCtx = b })
+
 
 instance HasSpan (FinishedSpan ctx) ctx where
     span = spanSpan
