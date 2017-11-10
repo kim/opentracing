@@ -4,7 +4,6 @@
 module Main where
 
 import Control.Concurrent     (threadDelay)
-import Control.Lens           (view)
 import Control.Monad          (void)
 import Control.Monad.IO.Class
 import OpenTracing
