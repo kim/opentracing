@@ -200,26 +200,26 @@ readActiveSpan = readIORef . fromActiveSpan
 
 
 data FinishedSpan ctx = FinishedSpan
-    { _fContext    :: ctx
-    , _fOperation  :: Text
-    , _fStart      :: UTCTime
-    , _fDuration   :: NominalDiffTime
-    , _fTags       :: Tags
-    , _fReferences :: [Reference ctx]
-    , _fLogs       :: [LogRecord]
+    { _fContext   :: ctx
+    , _fOperation :: Text
+    , _fStart     :: UTCTime
+    , _fDuration  :: NominalDiffTime
+    , _fTags      :: Tags
+    , _fRefs      :: [Reference ctx]
+    , _fLogs      :: [LogRecord]
     }
 
 traceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
 traceFinish s = do
     (t,refs) <- liftIO $ (,) <$> getCurrentTime <*> freezeRefs (_sRefs s)
     pure FinishedSpan
-        { _fContext    = _sContext s
-        , _fOperation  = _sOperation s
-        , _fStart      = _sStart s
-        , _fDuration   = diffUTCTime t (_sStart s)
-        , _fTags       = _sTags s
-        , _fReferences = refs
-        , _fLogs       = _sLogs s
+        { _fContext   = _sContext s
+        , _fOperation = _sOperation s
+        , _fStart     = _sStart s
+        , _fDuration  = diffUTCTime t (_sStart s)
+        , _fTags      = _sTags s
+        , _fRefs      = refs
+        , _fLogs      = _sLogs s
         }
 
 makeLenses ''Span
@@ -255,8 +255,15 @@ instance HasSampled ctx => HasSampled (FinishedSpan ctx) where
     ctxSampled = spanContext . ctxSampled
 
 
+class HasRefs s a | s -> a where
+    spanRefs :: Lens' s a
+
+instance HasRefs (Span ctx) (SpanRefs ctx) where
+    spanRefs = sRefs
+
+instance HasRefs (FinishedSpan ctx) [Reference ctx] where
+    spanRefs = fRefs
+
+
 spanDuration :: Lens' (FinishedSpan ctx) NominalDiffTime
 spanDuration = fDuration
-
-spanRefs :: Lens' (FinishedSpan ctx) [Reference ctx]
-spanRefs = fReferences
