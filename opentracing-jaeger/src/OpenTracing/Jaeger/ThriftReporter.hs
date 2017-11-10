@@ -43,6 +43,10 @@ newtype JaegerContext = JaegerContext { fromJaegerContext :: StdContext }
 instance MonadIO m => MonadReport JaegerContext (ReaderT UDP m) where
     traceReport = report
 
+instance HasSampled JaegerContext where
+    ctxSampled = lens (view ctxSampled . fromJaegerContext) $ \s b ->
+        s { fromJaegerContext = set ctxSampled b (fromJaegerContext s) }
+
 
 data UDP = UDP
     { udpSock :: Socket
@@ -78,16 +82,12 @@ jaegerThriftReporter r = Interpret $ \m -> runReaderT m r
 report :: (MonadIO m, MonadReader UDP m) => FinishedSpan JaegerContext -> m ()
 report s = do
     proto <- Thrift.CompactProtocol <$> ask
-    let spans = Vector.singleton . toThriftSpan . asStd $ s
+    let spans = Vector.singleton . toThriftSpan $ s
     liftIO $
         Thrift.emitBatch (undefined, proto)
                          Thrift.default_Batch { batch_spans = spans }
-  where
-    asStd :: FinishedSpan JaegerContext -> FinishedSpan StdContext
-    asStd = over context fromJaegerContext
 
-
-toThriftSpan :: FinishedSpan StdContext -> Thrift.Span
+toThriftSpan :: FinishedSpan JaegerContext -> Thrift.Span
 toThriftSpan s = Thrift.Span
     { span_traceIdLow    = view (spanContext . to traceIdLo') s
     , span_traceIdHigh   = view (spanContext . to traceIdHi') s
@@ -121,7 +121,7 @@ toThriftSpan s = Thrift.Span
                          $ view spanLogs s
     }
 
-toThriftSpanRef :: Reference StdContext -> Thrift.SpanRef
+toThriftSpanRef :: Reference JaegerContext -> Thrift.SpanRef
 toThriftSpanRef ref = Thrift.SpanRef
     { spanRef_refType     = toThriftRefType ref
     , spanRef_traceIdLow  = traceIdLo' (refCtx ref)
@@ -161,11 +161,11 @@ toThriftLog r = Thrift.Log
         ErrKind    v -> v
         ErrObj     v -> view packed (show v)
 
-traceIdLo' :: StdContext -> Int64
-traceIdLo' = fromIntegral . traceIdLo . ctxTraceID
+traceIdLo' :: JaegerContext -> Int64
+traceIdLo' = fromIntegral . traceIdLo . ctxTraceID . fromJaegerContext
 
-traceIdHi' :: StdContext -> Int64
-traceIdHi' = maybe 0 fromIntegral . traceIdHi . ctxTraceID
+traceIdHi' :: JaegerContext -> Int64
+traceIdHi' = maybe 0 fromIntegral . traceIdHi . ctxTraceID . fromJaegerContext
 
-ctxSpanID' :: StdContext -> Int64
-ctxSpanID' = fromIntegral . ctxSpanID
+ctxSpanID' :: JaegerContext -> Int64
+ctxSpanID' = fromIntegral . ctxSpanID . fromJaegerContext

@@ -9,7 +9,6 @@
 {-# LANGUAGE StrictData            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE ViewPatterns          #-}
 
 module OpenTracing.Zipkin
     ( ZipkinContext
@@ -158,10 +157,12 @@ zipkinTracer :: Env -> Interpret (MonadTrace ZipkinContext) MonadIO
 zipkinTracer r = Interpret $ \m -> runReaderT m r
 
 start :: (MonadIO m, MonadReader Env m) => SpanOpts ZipkinContext -> m (Span ZipkinContext)
-start so@SpanOpts{..} = do
-    ctx <- case spanOptRefs of
-               []    -> freshContext so
-               (p:_) -> fromParent p
+start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
+    ctx <- do
+        p <- findParent <$> liftIO (freezeRefs spanOptRefs)
+        case p of
+            Nothing -> freshContext so
+            Just p' -> fromParent   (refCtx p')
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
 newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
@@ -195,8 +196,8 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
         , _ctxBaggage     = mempty
         }
 
-fromParent :: (MonadIO m, MonadReader Env m) => Reference ZipkinContext -> m ZipkinContext
-fromParent (refCtx -> p) = do
+fromParent :: (MonadIO m, MonadReader Env m) => ZipkinContext -> m ZipkinContext
+fromParent p = do
     spid <- newSpanID
     return ZipkinContext
         { ctxTraceID      = ctxTraceID p

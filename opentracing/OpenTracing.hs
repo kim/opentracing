@@ -42,7 +42,7 @@ traced
        )
     => SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
-    -> m a
+    -> m (Traced ctx a)
 traced opt f = ask >>= \t -> traced' t opt f
 
 traced'
@@ -53,7 +53,7 @@ traced'
     => Tracing     ctx MonadIO
     -> SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
-    -> m a
+    -> m (Traced ctx a)
 traced' t@Tracing{runTrace} opt f = mask $ \unmasked -> do
     span <- interpret runTrace (traceStart opt) >>= liftIO . mkActive
     ret  <- unmasked (f span) `catchAll` \e -> liftIO $ do
@@ -61,10 +61,10 @@ traced' t@Tracing{runTrace} opt f = mask $ \unmasked -> do
                 modifyActiveSpan span $
                       over spanTags (setTag (Error True))
                     . over spanLogs (LogRecord now (ErrObj e :| []) :)
-                report t span
+                _   <- report t span
                 throwM e
-    report t span
-    return ret
+    fin  <- report t span
+    return Traced { tracedResult = ret, tracedSpan = fin }
 
 report
     :: ( HasSampled ctx
@@ -72,11 +72,11 @@ report
        )
     => Tracing    ctx MonadIO
     -> ActiveSpan ctx
-    -> m ()
+    -> m (FinishedSpan ctx)
 report Tracing{runTrace,runReport} a = do
-    span <- liftIO $ readActiveSpan a
+    span <- liftIO (readActiveSpan a) >>= \s ->
+                interpret runTrace $ traceFinish s
     case view ctxSampled span of
-        Sampled -> do
-            finished <- interpret runTrace $ traceFinish span
-            interpret runReport $ traceReport finished
+        Sampled    -> interpret runReport $ traceReport span
         NotSampled -> return () -- TODO: record metric
+    return span

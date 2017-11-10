@@ -15,36 +15,43 @@ import           Network.HTTP.Client.Internal
     , getUri
     , responseStatus
     )
-import           OpenTracing
+import           OpenTracing                  hiding (sampled)
 import           Prelude                      hiding (span)
 
 -- |
 --
--- >>> httpTraced tracing [ChildOf parent] req mgr httpLbs
---
--- >>> httpTraced tracing [ChildOf parent] req mgr $ \r m -> withResponse r m brConsume
---
+-- >>> :{
+-- traced (spanOpts "toplevel" mempty) $ \parent -> do
+--     rpc1 <- httpTraced tracing (childOf parent) req mgr httpLbs
+--     rpc2 <- httpTraced tracing
+--                        (childOf parent <> followsFrom (tracedSpan rpc1))
+--                        req mgr $ \r m ->
+--                 withResponse r m brConsume
+--     return [tracedResult rpc1, tracedResult rpc2]
+-- :}
 httpTraced
     :: ( HasSampled ctx
        , AsCarrier  HttpHeaders ctx ctx
        )
     => Tracing ctx MonadIO
-    -> [Reference ctx]
+    -> SpanRefs ctx
     -> Request
     -> Manager
     -> (Request -> Manager -> IO a)
-    -> IO a
+    -> IO (Traced ctx a)
 httpTraced tracing refs req mgr f = do
+    sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
+
     let opt = SpanOpts
             { spanOptOperation = decodeUtf8 $ path req
             , spanOptRefs      = refs
+            , spanOptSampled   = sampled
             , spanOptTags      =
                 [ HttpMethod  (method req)
                 , HttpUrl     (Text.pack . show $ getUri req)
                 , PeerAddress (decodeUtf8 (host req))
                 , SpanKind    RPCClient
                 ]
-            , spanOptSampled   = Nothing -- XXX
             }
 
     traced' tracing opt $ \span ->
@@ -52,13 +59,15 @@ httpTraced tracing refs req mgr f = do
          in f (req { requestManagerOverride = Just mgr' }) mgr'
   where
     modMgr span = mgr
-        { mModifyRequest  = pure . inject (view spanContext span)
-        , mModifyResponse = \res -> do
+        { mModifyRequest  = \rq ->
+            inject rq . view spanContext <$> readActiveSpan span
+
+        , mModifyResponse = \rs -> do
             modifyActiveSpan span $
-                over spanTags (setTag (HttpStatusCode (responseStatus res)))
-            return res
+                over spanTags (setTag (HttpStatusCode (responseStatus rs)))
+            return rs
         }
 
-    inject ctx rq = rq
+    inject rq ctx = rq
         { requestHeaders = requestHeaders rq <> fromHttpHeaders (traceInject ctx)
         }

@@ -1,9 +1,12 @@
 {-# LANGUAGE DeriveGeneric          #-}
+{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE NamedFieldPuns         #-}
+{-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE StrictData             #-}
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TupleSections          #-}
 
@@ -11,7 +14,7 @@ module OpenTracing.Span
     ( Span
     , newSpan
 
-    , HasSpan
+    , HasSpanFields
 
     , ActiveSpan
     , mkActive
@@ -35,32 +38,43 @@ module OpenTracing.Span
     , Reference(..)
     , findParent
 
-    , HasContext
-    , context
+    , SpanRefs
+    , refActiveParents
+    , refPredecessors
+    , refPropagated
+    , childOf
+    , followsFrom
+    , freezeRefs
 
     , Sampled(..)
     , HasSampled(..)
     , sampled
+
+    , Traced(..)
     )
 where
 
-import           Control.Lens           hiding (op)
-import           Control.Monad.IO.Class
-import           Data.Aeson             (ToJSON (..))
-import           Data.Aeson.Encoding    hiding (bool)
-import           Data.Bool              (bool)
-import           Data.Foldable
-import           Data.Hashable
-import           Data.HashSet           (HashSet)
-import qualified Data.HashSet           as HashSet
-import           Data.IORef
-import           Data.Text              (Text)
-import           Data.Time.Clock
-import           GHC.Generics           (Generic)
-import           OpenTracing.Log
-import           OpenTracing.Tags
-import           Prelude                hiding (span)
+import Control.Lens           hiding (op, pre)
+import Control.Monad.IO.Class
+import Data.Aeson             (ToJSON (..))
+import Data.Aeson.Encoding    hiding (bool)
+import Data.Bool              (bool)
+import Data.Foldable
+import Data.Hashable
+import Data.IORef
+import Data.Monoid
+import Data.Text              (Text)
+import Data.Time.Clock
+import GHC.Generics           (Generic)
+import OpenTracing.Log
+import OpenTracing.Tags
+import Prelude                hiding (span)
 
+
+data Traced ctx a = Traced
+    { tracedResult :: a
+    , tracedSpan   :: FinishedSpan ctx
+    }
 
 data Sampled = NotSampled | Sampled
     deriving (Eq, Show, Read, Bounded, Enum, Generic)
@@ -97,121 +111,152 @@ findParent = foldl' go Nothing
     prec _               _               = EQ
 
 
+data SpanRefs ctx = SpanRefs
+    { _refActiveParents :: [ActiveSpan   ctx]
+    , _refPredecessors  :: [FinishedSpan ctx]
+    , _refPropagated    :: [Reference    ctx]
+    }
+
+instance Monoid (SpanRefs ctx) where
+    mempty = SpanRefs mempty mempty mempty
+
+    (SpanRefs par pre pro) `mappend` (SpanRefs par' pre' pro') = SpanRefs
+        { _refActiveParents = par <> par'
+        , _refPredecessors  = pre <> pre'
+        , _refPropagated    = pro <> pro'
+        }
+
+childOf :: ActiveSpan ctx -> SpanRefs ctx
+childOf a = mempty { _refActiveParents = [a] }
+
+followsFrom :: FinishedSpan ctx -> SpanRefs ctx
+followsFrom a = mempty { _refPredecessors = [a] }
+
+freezeRefs :: SpanRefs ctx -> IO [Reference ctx]
+freezeRefs SpanRefs{..} = do
+    a <- traverse (fmap (ChildOf . _sContext) . readActiveSpan) _refActiveParents
+    let b = map (FollowsFrom . _fContext) _refPredecessors
+    return $ a <> b <> _refPropagated
+
+
 data SpanOpts ctx = SpanOpts
     { spanOptOperation :: Text
-    , spanOptRefs      :: [Reference ctx]
+    , spanOptRefs      :: SpanRefs ctx
     , spanOptTags      :: [Tag]
     , spanOptSampled   :: Maybe Sampled
     -- ^ Force 'Span' to be sampled (or not).
     -- 'Nothing' denotes leave decision to 'Sampler' (the default)
     }
 
-spanOpts :: Text -> [Reference ctx] -> SpanOpts ctx
-spanOpts op ref = SpanOpts
+spanOpts :: Text -> SpanRefs ctx -> SpanOpts ctx
+spanOpts op refs = SpanOpts
     { spanOptOperation = op
-    , spanOptRefs      = ref
+    , spanOptRefs      = refs
     , spanOptTags      = mempty
     , spanOptSampled   = Nothing
     }
 
 data Span ctx = Span
-    { _spanContext   :: ctx
-    , _spanOperation :: Text
-    , _spanStart     :: UTCTime
-    , _spanTags      :: Tags
-    , _spanRefs      :: HashSet (Reference ctx)
-    , _spanLogs      :: [LogRecord]
-    } deriving Show
+    { _sContext   :: ctx
+    , _sOperation :: Text
+    , _sStart     :: UTCTime
+    , _sTags      :: Tags
+    , _sRefs      :: SpanRefs ctx
+    , _sLogs      :: [LogRecord]
+    }
 
 newSpan
-    :: ( MonadIO     m
-       , Eq          ctx
-       , Hashable    ctx
-       , Foldable    t
-       , Foldable    u
+    :: ( MonadIO  m
+       , Foldable t
        )
     => ctx
     -> Text
-    -> t (Reference ctx)
-    -> u Tag
+    -> SpanRefs ctx
+    -> t Tag
     -> m (Span ctx)
-newSpan ctx op rs ts = do
+newSpan ctx op refs ts = do
     t <- liftIO getCurrentTime
     pure Span
-        { _spanContext   = ctx
-        , _spanOperation = op
-        , _spanStart     = t
-        , _spanTags      = foldMap (`setTag` mempty) ts
-        , _spanRefs      = HashSet.fromList . toList $ rs
-        , _spanLogs      = mempty
+        { _sContext   = ctx
+        , _sOperation = op
+        , _sStart     = t
+        , _sTags      = foldMap (`setTag` mempty) ts
+        , _sRefs      = refs
+        , _sLogs      = mempty
         }
 
 
-data ActiveSpan ctx = ActiveSpan
-    { _activeSpan   :: Span ctx
-    , mutActiveSpan :: IORef (Span ctx)
-    }
+newtype ActiveSpan ctx = ActiveSpan { fromActiveSpan :: IORef (Span ctx) }
 
 mkActive :: Span ctx -> IO (ActiveSpan ctx)
-mkActive s = ActiveSpan s <$> newIORef s
+mkActive = fmap ActiveSpan . newIORef
 
 modifyActiveSpan :: ActiveSpan ctx -> (Span ctx -> Span ctx) -> IO ()
-modifyActiveSpan ActiveSpan{mutActiveSpan} f =
-    atomicModifyIORef' mutActiveSpan ((,()) . f)
+modifyActiveSpan ActiveSpan{fromActiveSpan} f =
+    atomicModifyIORef' fromActiveSpan ((,()) . f)
 
 readActiveSpan :: ActiveSpan ctx -> IO (Span ctx)
-readActiveSpan = readIORef . mutActiveSpan
+readActiveSpan = readIORef . fromActiveSpan
 
 
 data FinishedSpan ctx = FinishedSpan
-    { _spanSpan     :: Span ctx
-    , _spanDuration :: NominalDiffTime
-    } deriving Show
+    { _fContext    :: ctx
+    , _fOperation  :: Text
+    , _fStart      :: UTCTime
+    , _fDuration   :: NominalDiffTime
+    , _fTags       :: Tags
+    , _fReferences :: [Reference ctx]
+    , _fLogs       :: [LogRecord]
+    }
 
 defaultTraceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
 defaultTraceFinish s = do
-    t <- liftIO getCurrentTime
+    (t,refs) <- liftIO $ (,) <$> getCurrentTime <*> freezeRefs (_sRefs s)
     pure FinishedSpan
-        { _spanSpan     = s
-        , _spanDuration = diffUTCTime t (_spanStart s)
+        { _fContext    = _sContext s
+        , _fOperation  = _sOperation s
+        , _fStart      = _sStart s
+        , _fDuration   = diffUTCTime t (_sStart s)
+        , _fTags       = _sTags s
+        , _fReferences = refs
+        , _fLogs       = _sLogs s
         }
 
-makeClassy ''Span
-makeLenses ''ActiveSpan
+makeLenses ''Span
 makeLenses ''FinishedSpan
+makeLenses ''SpanRefs
 
-class HasContext s t a b | s -> a, t -> b where
-    context :: Lens s t a b
+class HasSpanFields a ctx | a -> ctx where
+    spanContext   :: Lens' a ctx
+    spanOperation :: Lens' a Text
+    spanStart     :: Lens' a UTCTime
+    spanTags      :: Lens' a Tags
+    spanLogs      :: Lens' a [LogRecord]
 
-instance (Eq ctx', Hashable ctx') => HasContext (Span ctx) (Span ctx') ctx ctx' where
-    context = lens sa sbt
-      where
-        sa = _spanContext
+instance HasSpanFields (Span ctx) ctx where
+    spanContext   = sContext
+    spanOperation = sOperation
+    spanStart     = sStart
+    spanTags      = sTags
+    spanLogs      = sLogs
 
-        sbt s b = s
-            { _spanContext = b
-            , _spanRefs    = HashSet.map (set context b) $ _spanRefs s
-            }
+instance HasSpanFields (FinishedSpan ctx) ctx where
+    spanContext   = fContext
+    spanOperation = fOperation
+    spanStart     = fStart
+    spanTags      = fTags
+    spanLogs      = fLogs
 
-instance (Eq ctx', Hashable ctx') => HasContext (FinishedSpan ctx) (FinishedSpan ctx') ctx ctx' where
-    context = lens sa sbt
-      where
-        sa = view spanContext
-
-        sbt s b = s { _spanSpan = set context b (_spanSpan s) }
-
-instance HasContext (Reference ctx) (Reference ctx') ctx ctx' where
-    context = lens refCtx (\s b -> s { refCtx = b })
-
-
-instance HasSpan (FinishedSpan ctx) ctx where
-    span = spanSpan
-
-instance HasSpan (ActiveSpan ctx) ctx where
-    span = activeSpan
 
 instance HasSampled ctx => HasSampled (Span ctx) where
     ctxSampled = spanContext . ctxSampled
 
 instance HasSampled ctx => HasSampled (FinishedSpan ctx) where
     ctxSampled = spanContext . ctxSampled
+
+
+spanDuration :: Lens' (FinishedSpan ctx) NominalDiffTime
+spanDuration = fDuration
+
+spanRefs :: Lens' (FinishedSpan ctx) [Reference ctx]
+spanRefs = fReferences

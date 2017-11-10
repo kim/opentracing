@@ -142,10 +142,12 @@ stdReporter = Interpret id
 -- Internal
 
 start :: (MonadIO m, MonadReader Env m) => SpanOpts StdContext -> m (Span StdContext)
-start so@SpanOpts{..} = do
-    ctx <- case spanOptRefs of
-               []    -> freshContext so
-               (p:_) -> fromParent p
+start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
+    ctx <- do
+        p <- findParent <$> liftIO (freezeRefs spanOptRefs)
+        case p of
+            Nothing -> freshContext so
+            Just p' -> fromParent   (refCtx p')
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
 report :: MonadIO m => FinishedSpan StdContext -> m ()
@@ -168,7 +170,12 @@ _Sampled = prism' enc dec
           . Text.decimal
 {-# INLINE _Sampled #-}
 
-freshContext :: (MonadIO m, MonadReader Env m) => SpanOpts StdContext -> m StdContext
+freshContext
+    :: ( MonadIO         m
+       , MonadReader Env m
+       )
+    => SpanOpts StdContext
+    -> m StdContext
 freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     trid <- newTraceID
     spid <- newSpanID
@@ -185,13 +192,18 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
         , _ctxBaggage = mempty
         }
 
-fromParent :: (MonadIO m, MonadReader Env m) => Reference StdContext -> m StdContext
+fromParent
+    :: ( MonadIO         m
+       , MonadReader Env m
+       )
+    => StdContext
+    -> m StdContext
 fromParent p = do
     spid <- newSpanID
     return StdContext
-        { ctxTraceID  = ctxTraceID (refCtx p)
+        { ctxTraceID  = ctxTraceID p
         , ctxSpanID   = spid
-        , ctxSampled' = view (to refCtx . ctxSampled) p
+        , ctxSampled' = view ctxSampled p
         , _ctxBaggage = mempty
         }
 
