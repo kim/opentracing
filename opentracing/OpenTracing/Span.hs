@@ -22,7 +22,7 @@ module OpenTracing.Span
     , readActiveSpan
 
     , FinishedSpan
-    , defaultTraceFinish
+    , traceFinish
 
     , spanContext
     , spanOperation
@@ -209,8 +209,8 @@ data FinishedSpan ctx = FinishedSpan
     , _fLogs       :: [LogRecord]
     }
 
-defaultTraceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
-defaultTraceFinish s = do
+traceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
+traceFinish s = do
     (t,refs) <- liftIO $ (,) <$> getCurrentTime <*> freezeRefs (_sRefs s)
     pure FinishedSpan
         { _fContext    = _sContext s

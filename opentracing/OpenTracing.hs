@@ -124,9 +124,8 @@ report
     => Tracing    ctx MonadIO
     -> ActiveSpan ctx
     -> m (FinishedSpan ctx)
-report Tracing{runTrace,runReport} a = do
-    span <- liftIO (readActiveSpan a) >>= \s ->
-                interpret runTrace $ traceFinish s
+report Tracing{runReport} a = do
+    span <- liftIO (readActiveSpan a) >>= traceFinish
     case view ctxSampled span of
         Sampled    -> interpret runReport $ traceReport span
         NotSampled -> return () -- TODO: record metric

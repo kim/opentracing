@@ -1,15 +1,13 @@
 {-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
 
 module OpenTracing.Class where
 
 import           Control.Category
-import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Reader
 import           OpenTracing.Span
-import           Prelude                hiding (id, (.))
+import           Prelude              hiding (id, (.))
 import qualified Prelude
 
 
@@ -23,10 +21,6 @@ instance Category Interpret where
 
 class Monad m => MonadTrace ctx m where
     traceStart  :: SpanOpts ctx -> m (Span ctx)
-    traceFinish :: Span     ctx -> m (FinishedSpan ctx)
-
-    default traceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
-    traceFinish = defaultTraceFinish
 
 class Monad m => MonadReport ctx m where
     traceReport :: FinishedSpan ctx -> m ()
