@@ -16,7 +16,6 @@ cabal-version:       >=1.10
 library
   exposed-modules:
       OpenTracing
-      OpenTracing.Class
       OpenTracing.Log
       OpenTracing.Propagation
       OpenTracing.Sampling

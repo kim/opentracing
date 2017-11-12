@@ -43,7 +43,6 @@ import qualified Data.Text.Read             as Text
 import           Data.Word
 import           GHC.Generics               (Generic)
 import           GHC.Stack                  (prettyCallStack)
-import           OpenTracing.Class
 import           OpenTracing.Log
 import           OpenTracing.Propagation
 import           OpenTracing.Sampling       (Sampler (runSampler))
@@ -126,17 +125,11 @@ newEnv samp = do
     prng <- liftIO createSystemRandom
     return Env { envPRNG = prng, _envSampler = samp }
 
-instance MonadIO m => MonadTrace StdContext (ReaderT Env m) where
-    traceStart = start
+stdTracer :: MonadIO m => Env -> SpanOpts StdContext -> m (Span StdContext)
+stdTracer r = flip runReaderT r . start
 
-instance MonadIO m => MonadReport StdContext m where
-    traceReport = report
-
-stdTracer :: Env -> Interpret (MonadTrace StdContext) MonadIO
-stdTracer r = Interpret $ \m -> runReaderT m r
-
-stdReporter :: Interpret (MonadReport StdContext) MonadIO
-stdReporter = Interpret id
+stdReporter :: MonadIO m => FinishedSpan StdContext -> m ()
+stdReporter f = liftIO $ report f
 
 --------------------------------------------------------------------------------
 -- Internal
@@ -150,8 +143,8 @@ start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
             Just p' -> fromParent   (refCtx p')
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
-report :: MonadIO m => FinishedSpan StdContext -> m ()
-report = liftIO . putStrLn . encodingToLazyByteString . spanE
+report :: FinishedSpan StdContext -> IO ()
+report = putStrLn . encodingToLazyByteString . spanE
 
 newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
 newTraceID = asks envPRNG >>= fmap (TraceID Nothing) . liftIO . uniform

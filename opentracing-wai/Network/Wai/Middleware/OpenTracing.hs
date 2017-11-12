@@ -2,10 +2,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module Network.Wai.Middleware.OpenTracing where
+module Network.Wai.Middleware.OpenTracing (opentracing) where
 
 import           Control.Lens           (over, set, view)
-import           Control.Monad.IO.Class (MonadIO)
 import           Data.Maybe
 import           Data.Semigroup
 import qualified Data.Text              as Text
@@ -21,7 +20,7 @@ opentracing
     :: ( HasSampled ctx
        , AsCarrier  HttpHeaders ctx ctx
        )
-    => Tracing ctx MonadIO
+    => Tracing           ctx
     -> TracedApplication ctx
     -> Application
 opentracing tracing app req respond = do

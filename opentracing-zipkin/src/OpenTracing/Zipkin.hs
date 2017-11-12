@@ -46,7 +46,6 @@ import           Data.Text               (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding      (decodeUtf8, encodeUtf8)
 import           Data.Word
 import           GHC.Generics            (Generic)
-import           OpenTracing.Class
 import           OpenTracing.Propagation
 import           OpenTracing.Sampling    (Sampler (runSampler))
 import           OpenTracing.Span        hiding (Sampled)
@@ -150,11 +149,8 @@ newEnv samp = do
         , _envSampler       = samp
         }
 
-instance MonadIO m => MonadTrace ZipkinContext (ReaderT Env m) where
-    traceStart = start
-
-zipkinTracer :: Env -> Interpret (MonadTrace ZipkinContext) MonadIO
-zipkinTracer r = Interpret $ \m -> runReaderT m r
+zipkinTracer :: MonadIO m => Env -> SpanOpts ZipkinContext -> m (Span ZipkinContext)
+zipkinTracer r = flip runReaderT r . start
 
 start :: (MonadIO m, MonadReader Env m) => SpanOpts ZipkinContext -> m (Span ZipkinContext)
 start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do

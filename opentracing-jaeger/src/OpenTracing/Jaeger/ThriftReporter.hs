@@ -25,7 +25,6 @@ import           Jaeger_Types
 import qualified Jaeger_Types                   as Thrift
 import           Network.Socket
 import           Network.Socket.ByteString.Lazy (sendAll)
-import           OpenTracing.Class
 import           OpenTracing.Log
 import           OpenTracing.Span
 import           OpenTracing.Standard
@@ -36,16 +35,6 @@ import           Prelude                        hiding (span)
 import qualified Thrift
 import qualified Thrift.Protocol.Compact        as Thrift
 import qualified Thrift.Transport.IOBuffer      as Thrift
-
-
-newtype JaegerContext = JaegerContext { fromJaegerContext :: StdContext }
-
-instance MonadIO m => MonadReport JaegerContext (ReaderT UDP m) where
-    traceReport = report
-
-instance HasSampled JaegerContext where
-    ctxSampled = lens (view ctxSampled . fromJaegerContext) $ \s b ->
-        s { fromJaegerContext = set ctxSampled b (fromJaegerContext s) }
 
 
 data UDP = UDP
@@ -75,11 +64,11 @@ openUDPTransport = do
 
 
 
-jaegerThriftReporter :: UDP -> Interpret (MonadReport JaegerContext) MonadIO
-jaegerThriftReporter r = Interpret $ \m -> runReaderT m r
+jaegerThriftReporter :: MonadIO m => UDP -> FinishedSpan StdContext -> m ()
+jaegerThriftReporter r = flip runReaderT r . report
 
 
-report :: (MonadIO m, MonadReader UDP m) => FinishedSpan JaegerContext -> m ()
+report :: (MonadIO m, MonadReader UDP m) => FinishedSpan StdContext -> m ()
 report s = do
     proto <- Thrift.CompactProtocol <$> ask
     let spans = Vector.singleton . toThriftSpan $ s
@@ -87,7 +76,7 @@ report s = do
         Thrift.emitBatch (undefined, proto)
                          Thrift.default_Batch { batch_spans = spans }
 
-toThriftSpan :: FinishedSpan JaegerContext -> Thrift.Span
+toThriftSpan :: FinishedSpan StdContext -> Thrift.Span
 toThriftSpan s = Thrift.Span
     { span_traceIdLow    = view (spanContext . to traceIdLo') s
     , span_traceIdHigh   = view (spanContext . to traceIdHi') s
@@ -121,7 +110,7 @@ toThriftSpan s = Thrift.Span
                          $ view spanLogs s
     }
 
-toThriftSpanRef :: Reference JaegerContext -> Thrift.SpanRef
+toThriftSpanRef :: Reference StdContext -> Thrift.SpanRef
 toThriftSpanRef ref = Thrift.SpanRef
     { spanRef_refType     = toThriftRefType ref
     , spanRef_traceIdLow  = traceIdLo' (refCtx ref)
@@ -161,11 +150,11 @@ toThriftLog r = Thrift.Log
         ErrKind    v -> v
         ErrObj     v -> view packed (show v)
 
-traceIdLo' :: JaegerContext -> Int64
-traceIdLo' = fromIntegral . traceIdLo . ctxTraceID . fromJaegerContext
+traceIdLo' :: StdContext -> Int64
+traceIdLo' = fromIntegral . traceIdLo . ctxTraceID
 
-traceIdHi' :: JaegerContext -> Int64
-traceIdHi' = maybe 0 fromIntegral . traceIdHi . ctxTraceID . fromJaegerContext
+traceIdHi' :: StdContext -> Int64
+traceIdHi' = maybe 0 fromIntegral . traceIdHi . ctxTraceID
 
-ctxSpanID' :: JaegerContext -> Int64
-ctxSpanID' = fromIntegral . ctxSpanID . fromJaegerContext
+ctxSpanID' :: StdContext -> Int64
+ctxSpanID' = fromIntegral . ctxSpanID

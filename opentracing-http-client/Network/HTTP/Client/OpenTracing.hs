@@ -2,10 +2,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-module Network.HTTP.Client.OpenTracing where
+module Network.HTTP.Client.OpenTracing
+    ( httpTraced
+    , httpTraced'
+    )
+where
 
 import           Control.Lens                 (over, view)
-import           Control.Monad.IO.Class       (MonadIO)
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
 import           Data.Semigroup               ((<>))
 import qualified Data.Text                    as Text
 import           Data.Text.Encoding           (decodeUtf8)
@@ -22,24 +27,37 @@ import           Prelude                      hiding (span)
 --
 -- >>> :{
 -- traced (spanOpts "toplevel" mempty) $ \parent -> do
---     rpc1 <- httpTraced tracing (childOf parent) req mgr httpLbs
---     rpc2 <- httpTraced tracing
---                        (childOf parent <> followsFrom (tracedSpan rpc1))
+--     rpc1 <- httpTraced (childOf parent) req mgr httpLbs
+--     rpc2 <- httpTraced (childOf parent <> followsFrom (tracedSpan rpc1))
 --                        req mgr $ \r m ->
 --                 withResponse r m brConsume
 --     return [tracedResult rpc1, tracedResult rpc2]
 -- :}
+--
 httpTraced
-    :: ( HasSampled ctx
-       , AsCarrier  HttpHeaders ctx ctx
+    :: ( HasSampled  ctx
+       , AsCarrier   HttpHeaders ctx ctx
+       , MonadReader (Tracing ctx) m
+       , MonadIO     m
        )
-    => Tracing ctx MonadIO
+    => SpanRefs ctx
+    -> Request
+    -> Manager
+    -> (Request -> Manager -> IO a)
+    -> m (Traced ctx a)
+httpTraced refs req mgr f = ask >>= \t -> liftIO $ httpTraced' t refs req mgr f
+
+httpTraced'
+    :: ( HasSampled  ctx
+       , AsCarrier   HttpHeaders ctx ctx
+       )
+    => Tracing  ctx
     -> SpanRefs ctx
     -> Request
     -> Manager
     -> (Request -> Manager -> IO a)
     -> IO (Traced ctx a)
-httpTraced tracing refs req mgr f = do
+httpTraced' tracing refs req mgr f = do
     sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
 
     let opt = SpanOpts

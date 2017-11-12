@@ -36,7 +36,6 @@ import Data.Monoid
 import Data.Text.Lazy.Encoding   (decodeUtf8)
 import Network.HTTP.Client       hiding (port)
 import Network.HTTP.Types        (hContentType)
-import OpenTracing.Class
 import OpenTracing.Log
 import OpenTracing.Span
 import OpenTracing.Tags
@@ -93,11 +92,9 @@ withEnv
 withEnv api loc zhost zport logfmt
     = bracket (liftIO $ newEnv api loc zhost zport logfmt) (liftIO . closeEnv)
 
-instance MonadIO m => MonadReport ZipkinContext (ReaderT Env m) where
-    traceReport = report
 
-zipkinHttpReporter :: Env -> Interpret (MonadReport ZipkinContext) MonadIO
-zipkinHttpReporter r = Interpret $ \m -> runReaderT m r
+zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan ZipkinContext -> m ()
+zipkinHttpReporter r = flip runReaderT r . report
 
 
 report :: (MonadIO m, MonadReader Env m) => FinishedSpan ZipkinContext -> m ()

@@ -1,6 +1,9 @@
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE StrictData            #-}
 
 module OpenTracing
     ( module OpenTracing.Propagation
@@ -12,14 +15,14 @@ module OpenTracing
     , Tracing(..)
 
     , traced
+    , runTracing
+
     , traced'
 
     , traced_
     , traced__
     , traced'_
     , traced'__
-
-    , runTracing
     )
 where
 
@@ -27,10 +30,9 @@ import Control.Lens
 import Control.Monad           (void)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Reader    (MonadReader, ask)
+import Control.Monad.Reader
 import Data.List.NonEmpty      (NonEmpty (..))
 import Data.Time.Clock
-import OpenTracing.Class
 import OpenTracing.Log
 import OpenTracing.Propagation
 import OpenTracing.Sampling
@@ -40,20 +42,28 @@ import OpenTracing.Types
 import Prelude                 hiding (span)
 
 
+data Tracing ctx = Tracing
+    { traceStart  :: forall m. MonadIO m => SpanOpts     ctx -> m (Span ctx)
+    , traceReport :: forall m. MonadIO m => FinishedSpan ctx -> m ()
+    }
+
+runTracing :: Monad m => Tracing ctx -> ReaderT (Tracing ctx) m a -> m a
+runTracing = flip runReaderT
+
 traced
     :: ( HasSampled  ctx
-       , MonadReader (Tracing ctx MonadIO) m
+       , MonadReader (Tracing ctx) m
        , MonadMask   m
        , MonadIO     m
        )
     => SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
-    -> m (Traced ctx a)
+    -> m (Traced   ctx a)
 traced opt f = ask >>= \t -> traced' t opt f
 
 traced_
     :: ( HasSampled  ctx
-       , MonadReader (Tracing ctx MonadIO) m
+       , MonadReader (Tracing ctx) m
        , MonadMask   m
        , MonadIO     m
        )
@@ -64,7 +74,7 @@ traced_ opt f = tracedResult <$> traced opt f
 
 traced__
     :: ( HasSampled  ctx
-       , MonadReader (Tracing ctx MonadIO) m
+       , MonadReader (Tracing ctx) m
        , MonadMask   m
        , MonadIO     m
        )
@@ -78,29 +88,36 @@ traced'
        , MonadMask  m
        , MonadIO    m
        )
-    => Tracing     ctx MonadIO
+    => Tracing     ctx
     -> SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
-    -> m (Traced ctx a)
-traced' t@Tracing{runTrace} opt f = mask $ \unmasked -> do
-    span <- interpret runTrace (traceStart opt) >>= liftIO . mkActive
-    ret  <- unmasked (f span) `catchAll` \e -> liftIO $ do
-                now <- getCurrentTime
-                modifyActiveSpan span $
-                      over spanTags (setTag (Error True))
-                    . over spanLogs (LogRecord now (ErrObj e :| []) :)
-                _   <- report t span
+    -> m (Traced   ctx a)
+traced' t@Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
+    span <- traceStart opt >>= liftIO . mkActive
+    ret  <- unmasked (f span) `catchAll` \e -> do
+                liftIO $ do
+                    now <- getCurrentTime
+                    modifyActiveSpan span $
+                          over spanTags (setTag (Error True))
+                        . over spanLogs (LogRecord now (ErrObj e :| []) :)
+                !_ <- report span
                 throwM e
-    fin  <- report t span
+    fin  <- report span
     return Traced { tracedResult = ret, tracedSpan = fin }
-
+  where
+    report a = do
+        span <- liftIO (readActiveSpan a) >>= traceFinish
+        case view ctxSampled span of
+            Sampled    -> traceReport span
+            NotSampled -> return () -- TODO: record metric
+        return span
 
 traced'_
     :: ( HasSampled ctx
        , MonadMask  m
        , MonadIO    m
        )
-    => Tracing     ctx MonadIO
+    => Tracing     ctx
     -> SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
     -> m a
@@ -111,22 +128,8 @@ traced'__
        , MonadMask  m
        , MonadIO    m
        )
-    => Tracing     ctx MonadIO
+    => Tracing     ctx
     -> SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
     -> m ()
 traced'__ t opt = void . traced' t opt
-
-report
-    :: ( HasSampled ctx
-       , MonadIO    m
-       )
-    => Tracing    ctx MonadIO
-    -> ActiveSpan ctx
-    -> m (FinishedSpan ctx)
-report Tracing{runReport} a = do
-    span <- liftIO (readActiveSpan a) >>= traceFinish
-    case view ctxSampled span of
-        Sampled    -> interpret runReport $ traceReport span
-        NotSampled -> return () -- TODO: record metric
-    return span
