@@ -1,31 +1,31 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE StrictData            #-}
-{-# LANGUAGE TupleSections         #-}
 
-module OpenTracing.Jaeger.ThriftReporter where
+module OpenTracing.Jaeger.ThriftReporter
+    ( UDP
+    , JaegerEndpoint(..)
+
+    , defaultJaegerEndpoint
+    , openUDPTransport
+    , jaegerThriftReporter
+    )
+where
 
 import qualified Agent_Client                   as Thrift
-import           Control.Lens
 import           Control.Monad.IO.Class         (MonadIO)
 import           Control.Monad.Reader
-import           Data.Bool                      (bool)
-import           Data.Foldable
-import           Data.Int                       (Int64)
-import           Data.Text                      (Text)
-import           Data.Text.Lens
 import qualified Data.Vector                    as Vector
-import           Data.Vector.Lens               (vector)
-import           GHC.Stack                      (prettyCallStack)
-import           Jaeger_Types
-    (Span (..), Tag (..), batch_spans)
+import           Jaeger_Types                   (batch_spans)
 import qualified Jaeger_Types                   as Thrift
 import           Network.Socket
 import           Network.Socket.ByteString.Lazy (sendAll)
-import           OpenTracing.Log
+import           OpenTracing.Jaeger.Thrift      (toThriftSpan)
 import           OpenTracing.Span
+import           OpenTracing.Standard
 import           OpenTracing.Tags               (TagVal (..), fromTags)
 import           OpenTracing.Time
 import           OpenTracing.Types
@@ -49,14 +49,24 @@ instance Thrift.Transport UDP where
     tPeek          = Thrift.peekBuf  . udpRBuf
     tFlush UDP{..} = Thrift.flushBuf udpWBuf >>= sendAll udpSock
 
+data JaegerEndpoint = JaegerEndpoint
+    { jaegerHost :: HostName
+    , jaegerPort :: Port
+    }
 
-openUDPTransport :: IO UDP
-openUDPTransport = do
-    addr : _ <- getAddrInfo (Just defaultHints { addrSocketType = Datagram })
-                            (Just "127.0.0.1")
-                            (Just "6831")
-    sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-    connect sock (addrAddress addr)
+defaultJaegerEndpoint :: JaegerEndpoint
+defaultJaegerEndpoint = JaegerEndpoint
+    { jaegerHost = "127.0.0.1"
+    , jaegerPort = 6831
+    }
+
+openUDPTransport :: JaegerEndpoint -> IO UDP
+openUDPTransport JaegerEndpoint{jaegerHost,jaegerPort} = do
+    AddrInfo{..} : _ <- getAddrInfo (Just defaultHints { addrSocketType = Datagram })
+                                    (Just jaegerHost)
+                                    (Just (show jaegerPort))
+    sock <- socket addrFamily addrSocketType addrProtocol
+    connect sock addrAddress
 
     UDP sock <$> Thrift.newWriteBuffer <*> Thrift.newReadBuffer
 
