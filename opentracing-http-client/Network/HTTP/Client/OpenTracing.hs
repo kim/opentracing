@@ -39,7 +39,8 @@ import           Prelude                      hiding (span)
 httpTraced
     :: ( HasSampled  ctx
        , AsCarrier   HttpHeaders ctx ctx
-       , MonadReader (Tracing ctx) m
+       , HasTracing  r r ctx ctx
+       , MonadReader r m
        , MonadIO     m
        )
     => SpanRefs ctx
@@ -47,7 +48,9 @@ httpTraced
     -> Manager
     -> (Request -> Manager -> IO a)
     -> m (Traced ctx a)
-httpTraced refs req mgr f = ask >>= \t -> liftIO $ httpTraced' t refs req mgr f
+httpTraced refs req mgr f = do
+    t <- view tracing
+    liftIO $ httpTraced' t refs req mgr f
 
 httpTraced'
     :: ( HasSampled  ctx
