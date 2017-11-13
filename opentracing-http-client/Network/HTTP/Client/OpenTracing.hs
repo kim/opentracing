@@ -26,11 +26,13 @@ import           Prelude                      hiding (span)
 -- |
 --
 -- >>> :{
+-- mgr <- newManager defaultManagerSettings
+-- rq1 <- parseRequest "http://service1.local/foo"
+-- rq2 <- parseRequest "http://service2.local/bar"
 -- traced (spanOpts "toplevel" mempty) $ \parent -> do
---     rpc1 <- httpTraced (childOf parent) req mgr httpLbs
+--     rpc1 <- httpTraced (childOf parent) rq1 mgr httpLbs
 --     rpc2 <- httpTraced (childOf parent <> followsFrom (tracedSpan rpc1))
---                        req mgr $ \r m ->
---                 withResponse r m brConsume
+--                        rq2 mgr httpLbs
 --     return [tracedResult rpc1, tracedResult rpc2]
 -- :}
 --
