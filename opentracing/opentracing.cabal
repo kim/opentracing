@@ -35,7 +35,6 @@ library
     , clock
     , containers
     , exceptions
-    , hashable
     , http-client
     , http-types
     , iproute

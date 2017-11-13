@@ -1,6 +1,4 @@
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -33,7 +31,6 @@ import           Data.Aeson.Encoding
 import           Data.ByteString.Lazy.Char8 (putStrLn)
 import qualified Data.CaseInsensitive       as CI
 import           Data.Foldable              (toList)
-import           Data.Hashable
 import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as HashMap
 import           Data.Monoid
@@ -41,7 +38,6 @@ import           Data.Text                  (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Read             as Text
 import           Data.Word
-import           GHC.Generics               (Generic)
 import           GHC.Stack                  (prettyCallStack)
 import           OpenTracing.Log
 import           OpenTracing.Propagation
@@ -59,9 +55,7 @@ data StdContext = StdContext
     , ctxSpanID   :: SpanID
     , ctxSampled' :: Sampled
     , _ctxBaggage :: HashMap Text Text
-    } deriving (Eq, Show, Generic)
-
-instance Hashable StdContext
+    }
 
 instance HasSampled StdContext where
     ctxSampled = lens ctxSampled' (\s a -> s { ctxSampled' = a })

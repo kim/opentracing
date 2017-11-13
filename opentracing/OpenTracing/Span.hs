@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -60,12 +59,10 @@ import Data.Aeson             (ToJSON (..))
 import Data.Aeson.Encoding    hiding (bool)
 import Data.Bool              (bool)
 import Data.Foldable
-import Data.Hashable
 import Data.IORef
 import Data.Monoid
 import Data.Text              (Text)
 import Data.Time.Clock
-import GHC.Generics           (Generic)
 import OpenTracing.Log
 import OpenTracing.Tags
 import Prelude                hiding (span)
@@ -77,9 +74,7 @@ data Traced ctx a = Traced
     }
 
 data Sampled = NotSampled | Sampled
-    deriving (Eq, Show, Read, Bounded, Enum, Generic)
-
-instance Hashable Sampled
+    deriving (Eq, Show, Read, Bounded, Enum)
 
 instance ToJSON Sampled where
     toJSON     = toJSON . fromEnum
@@ -96,9 +91,6 @@ sampled = iso (bool NotSampled Sampled) $ \case
 data Reference ctx
     = ChildOf     { refCtx :: ctx }
     | FollowsFrom { refCtx :: ctx }
-    deriving (Eq, Show, Generic)
-
-instance Hashable ctx => Hashable (Reference ctx)
 
 findParent :: Foldable t => t (Reference ctx) -> Maybe (Reference ctx)
 findParent = foldl' go Nothing

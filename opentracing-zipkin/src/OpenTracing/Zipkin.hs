@@ -56,6 +56,7 @@ import           System.Random.MWC
 
 type SpanID  = Word64
 
+-- XXX: not sure if we actually need flags other than 'Debug'
 data Flag
     = Debug
     | SamplingSet
@@ -72,9 +73,7 @@ data ZipkinContext = ZipkinContext
     , ctxParentSpanID :: Maybe SpanID
     , _ctxFlags       :: HashSet Flag
     , _ctxBaggage     :: HashMap Text Text
-    } deriving (Eq, Show, Generic)
-
-instance Hashable  ZipkinContext
+    }
 
 instance HasSampled ZipkinContext where
     ctxSampled = lens sa sbt

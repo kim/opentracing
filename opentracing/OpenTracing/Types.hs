@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
@@ -19,7 +18,6 @@ where
 import           Control.Lens
 import           Data.Aeson                 (ToJSON (..))
 import           Data.Aeson.Encoding
-import           Data.Hashable              (Hashable)
 import qualified Data.IP                    as IP
 import           Data.Monoid
 import           Data.Text                  (Text)
@@ -28,15 +26,12 @@ import qualified Data.Text.Lazy.Builder     as TB
 import qualified Data.Text.Lazy.Builder.Int as TB
 import qualified Data.Text.Read             as TR
 import           Data.Word
-import           GHC.Generics               (Generic)
 
 
 data TraceID = TraceID
     { traceIdHi :: Maybe Word64
     , traceIdLo :: Word64
-    } deriving (Eq, Ord, Show, Generic)
-
-instance Hashable TraceID
+    } deriving (Eq, Ord, Show)
 
 
 newtype IPv4 = IPv4 { fromIPv4 :: IP.IPv4 }
