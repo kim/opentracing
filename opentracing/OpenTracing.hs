@@ -1,9 +1,11 @@
-{-# LANGUAGE BangPatterns          #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE NamedFieldPuns         #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE StrictData             #-}
 
 module OpenTracing
     ( module OpenTracing.Propagation
@@ -13,10 +15,11 @@ module OpenTracing
     , module OpenTracing.Types
 
     , Tracing(..)
+    , HasTracing(..)
 
-    , traced
     , runTracing
 
+    , traced
     , traced'
 
     , traced_
@@ -47,23 +50,32 @@ data Tracing ctx = Tracing
     , traceReport :: forall m. MonadIO m => FinishedSpan ctx -> m ()
     }
 
+class HasTracing s t ctx ctx' | s -> ctx, t -> ctx' where
+    tracing :: Lens s t (Tracing ctx) (Tracing ctx')
+
+instance HasTracing (Tracing ctx) (Tracing ctx') ctx ctx' where
+    tracing = id
+
 runTracing :: Monad m => Tracing ctx -> ReaderT (Tracing ctx) m a -> m a
 runTracing = flip runReaderT
 
+
 traced
     :: ( HasSampled  ctx
-       , MonadReader (Tracing ctx) m
+       , HasTracing  r r ctx ctx
+       , MonadReader r m
        , MonadMask   m
        , MonadIO     m
        )
     => SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
     -> m (Traced   ctx a)
-traced opt f = ask >>= \t -> traced' t opt f
+traced opt f = view tracing >>= \t -> traced' t opt f
 
 traced_
     :: ( HasSampled  ctx
-       , MonadReader (Tracing ctx) m
+       , HasTracing  r r ctx ctx
+       , MonadReader r m
        , MonadMask   m
        , MonadIO     m
        )
@@ -74,7 +86,8 @@ traced_ opt f = tracedResult <$> traced opt f
 
 traced__
     :: ( HasSampled  ctx
-       , MonadReader (Tracing ctx) m
+       , HasTracing  r r ctx ctx
+       , MonadReader r m
        , MonadMask   m
        , MonadIO     m
        )
@@ -92,7 +105,7 @@ traced'
     -> SpanOpts    ctx
     -> (ActiveSpan ctx -> m a)
     -> m (Traced   ctx a)
-traced' t@Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
+traced' Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
     span <- traceStart opt >>= liftIO . mkActive
     ret  <- unmasked (f span) `catchAll` \e -> do
                 liftIO $ do

@@ -23,7 +23,7 @@ opentracing
     => Tracing           ctx
     -> TracedApplication ctx
     -> Application
-opentracing tracing app req respond = do
+opentracing t app req respond = do
     let ctx = traceExtract (HttpHeaders (requestHeaders req))
     let opt = SpanOpts
             { spanOptOperation = Text.intercalate "/" (pathInfo req)
@@ -40,10 +40,11 @@ opentracing tracing app req respond = do
                 ]
             }
 
-    fmap tracedResult . traced' tracing opt $ \span -> app span req $ \res -> do
-        modifyActiveSpan span $
-            over spanTags (setTag (HttpStatusCode (responseStatus res)))
-        respond res
+    fmap tracedResult . traced' t opt $ \span ->
+        app span req                  $ \res  -> do
+            modifyActiveSpan span $
+                over spanTags (setTag (HttpStatusCode (responseStatus res)))
+            respond res
   where
     url = "http" <> if isSecure req then "s" else mempty <> "://"
        <> fromMaybe "localhost" (requestHeaderHost req)

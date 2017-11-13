@@ -57,7 +57,7 @@ httpTraced'
     -> Manager
     -> (Request -> Manager -> IO a)
     -> IO (Traced ctx a)
-httpTraced' tracing refs req mgr f = do
+httpTraced' t refs req mgr f = do
     sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
 
     let opt = SpanOpts
@@ -72,7 +72,7 @@ httpTraced' tracing refs req mgr f = do
                 ]
             }
 
-    traced' tracing opt $ \span ->
+    traced' t opt $ \span ->
         let mgr' = modMgr span
          in f (req { requestManagerOverride = Just mgr' }) mgr'
   where
