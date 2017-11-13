@@ -79,8 +79,7 @@ toThriftSpan s = Thrift.Span
     { span_traceIdLow    = view (spanContext . to traceIdLo') s
     , span_traceIdHigh   = view (spanContext . to traceIdHi') s
     , span_spanId        = view (spanContext . to ctxSpanID') s
-    , span_parentSpanId  = maybe 0 (ctxSpanID' . refCtx)
-                         . findParent
+    , span_parentSpanId  = maybe 0 (ctxSpanID' . refCtx) . findParent
                          $ view spanRefs s
     , span_operationName = view (spanOperation . lazy) s
     , span_references    = view ( spanRefs

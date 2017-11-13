@@ -72,7 +72,7 @@ httpTraced' t refs req mgr f = do
 
     traced' t opt $ \span ->
         let mgr' = modMgr span
-         in f (req { requestManagerOverride = Just mgr' }) mgr'
+         in f req { requestManagerOverride = Just mgr' } mgr'
   where
     modMgr span = mgr
         { mModifyRequest  = \rq ->
