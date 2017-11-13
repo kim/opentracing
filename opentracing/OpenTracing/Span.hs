@@ -70,7 +70,7 @@ import Prelude                hiding (span)
 
 data Traced ctx a = Traced
     { tracedResult :: a
-    , tracedSpan   :: FinishedSpan ctx
+    , tracedSpan   :: ~(FinishedSpan ctx)
     }
 
 data Sampled = NotSampled | Sampled
