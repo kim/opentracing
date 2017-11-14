@@ -4,27 +4,27 @@
 
 module Network.Wai.Middleware.OpenTracing (opentracing) where
 
-import           Control.Lens           (over, set, view)
+import           Control.Lens       (over, preview, set, view)
 import           Data.Maybe
 import           Data.Semigroup
-import qualified Data.Text              as Text
-import           Data.Text.Encoding     (decodeUtf8)
+import qualified Data.Text          as Text
+import           Data.Text.Encoding (decodeUtf8)
 import           Network.Wai
 import           OpenTracing
-import           Prelude                hiding (span)
+import           Prelude            hiding (span)
 
 
 type TracedApplication ctx = ActiveSpan ctx -> Application
 
 opentracing
-    :: ( HasSampled ctx
-       , AsCarrier  HttpHeaders ctx ctx
+    :: ( HasSampled      ctx
+       , Propagation     ctx
        )
     => Tracing           ctx
     -> TracedApplication ctx
     -> Application
 opentracing t app req respond = do
-    let ctx = traceExtract (HttpHeaders (requestHeaders req))
+    let ctx = preview _Headers (requestHeaders req)
     let opt = SpanOpts
             { spanOptOperation = Text.intercalate "/" (pathInfo req)
             , spanOptRefs      = (\x -> set refPropagated x mempty)

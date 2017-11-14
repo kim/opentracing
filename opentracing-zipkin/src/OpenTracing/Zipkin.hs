@@ -34,7 +34,6 @@ import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.Bool               (bool)
-import qualified Data.CaseInsensitive    as CI
 import           Data.Hashable           (Hashable)
 import           Data.HashMap.Strict     (HashMap)
 import qualified Data.HashMap.Strict     as HashMap
@@ -42,8 +41,7 @@ import           Data.HashSet            (HashSet)
 import qualified Data.HashSet            as HashSet
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Text               (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding      (decodeUtf8, encodeUtf8)
+import           Data.Text               (Text, isPrefixOf)
 import           Data.Word
 import           GHC.Generics            (Generic)
 import           OpenTracing.Propagation
@@ -84,11 +82,10 @@ instance HasSampled ZipkinContext where
         sbt s Span.Sampled    = s { _ctxFlags = HashSet.insert Sampled (_ctxFlags s) }
         sbt s Span.NotSampled = s { _ctxFlags = HashSet.delete Sampled (_ctxFlags s) }
 
-
-instance AsCarrier TextMap ZipkinContext ZipkinContext where
-    _Carrier = prism' fromCtx toCtx
+instance Propagation ZipkinContext where
+    _TextMap = prism' fromCtx toCtx
       where
-        fromCtx ZipkinContext{..} = TextMap . HashMap.fromList . catMaybes $
+        fromCtx ZipkinContext{..} = HashMap.fromList . catMaybes $
               Just ("x-b3-traceid", view hexText ctxTraceID)
             : Just ("x-b3-spanid" , view hexText ctxSpanID)
             : fmap (("x-b3-parentspanid",) . view hexText) ctxParentSpanID
@@ -96,7 +93,7 @@ instance AsCarrier TextMap ZipkinContext ZipkinContext where
             : Just ("x-b3-flags"  , if HashSet.member Debug   _ctxFlags then "1"    else "0")
             : map (Just . over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
-        toCtx (TextMap m) = ZipkinContext
+        toCtx m = ZipkinContext
             <$> (HashMap.lookup "x-b3-traceid" m >>= preview _Hex . knownHex)
             <*> (HashMap.lookup "x-b3-spanid"  m >>= preview _Hex . knownHex)
             <*> (Just $ HashMap.lookup "x-b3-parentspanid" m >>= preview _Hex . knownHex)
@@ -111,23 +108,6 @@ instance AsCarrier TextMap ZipkinContext ZipkinContext where
                 )
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
-
-instance AsCarrier HttpHeaders ZipkinContext ZipkinContext where
-    _Carrier = prism' fromCtx toCtx
-      where
-        fromCtx
-            = HttpHeaders
-            . map (bimap (CI.mk . encodeUtf8) encodeUtf8)
-            . HashMap.toList
-            . fromTextMap
-            . (review _Carrier :: ZipkinContext -> TextMap ZipkinContext)
-
-        toCtx
-            = (preview _Carrier :: TextMap ZipkinContext -> Maybe ZipkinContext)
-            . TextMap
-            . HashMap.fromList
-            . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
-            . fromHttpHeaders
 
 hasFlag :: Flag -> ZipkinContext -> Bool
 hasFlag f = HashSet.member f . _ctxFlags

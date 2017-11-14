@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
 
 module Network.HTTP.Client.OpenTracing
     ( httpTraced
@@ -8,7 +7,7 @@ module Network.HTTP.Client.OpenTracing
     )
 where
 
-import           Control.Lens                 (over, view)
+import           Control.Lens                 (over, review, view)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.Semigroup               ((<>))
@@ -38,7 +37,7 @@ import           Prelude                      hiding (span)
 --
 httpTraced
     :: ( HasSampled  ctx
-       , AsCarrier   HttpHeaders ctx ctx
+       , Propagation ctx
        , HasTracing  r r ctx ctx
        , MonadReader r m
        , MonadIO     m
@@ -54,7 +53,7 @@ httpTraced refs req mgr f = do
 
 httpTraced'
     :: ( HasSampled  ctx
-       , AsCarrier   HttpHeaders ctx ctx
+       , Propagation ctx
        )
     => Tracing  ctx
     -> SpanRefs ctx
@@ -92,5 +91,5 @@ httpTraced' t refs req mgr f = do
         }
 
     inject rq ctx = rq
-        { requestHeaders = requestHeaders rq <> fromHttpHeaders (traceInject ctx)
+        { requestHeaders = requestHeaders rq <> review _Headers ctx
         }

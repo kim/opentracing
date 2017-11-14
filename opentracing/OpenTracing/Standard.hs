@@ -29,13 +29,11 @@ import           Control.Monad.Reader
 import           Data.Aeson                 hiding (Error)
 import           Data.Aeson.Encoding
 import           Data.ByteString.Lazy.Char8 (putStrLn)
-import qualified Data.CaseInsensitive       as CI
 import           Data.Foldable              (toList)
 import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as HashMap
 import           Data.Monoid
-import           Data.Text                  (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
+import           Data.Text                  (Text, isPrefixOf)
 import qualified Data.Text.Read             as Text
 import           Data.Word
 import           GHC.Stack                  (prettyCallStack)
@@ -74,40 +72,20 @@ instance ToJSON StdContext where
         , "baggage"  .= _ctxBaggage
         ]
 
-
-instance AsCarrier TextMap StdContext StdContext where
-    _Carrier = prism' fromCtx toCtx
+instance Propagation StdContext where
+    _TextMap = prism' fromCtx toCtx
       where
-        fromCtx c@StdContext{..} = TextMap . HashMap.fromList $
+        fromCtx c@StdContext{..} = HashMap.fromList $
               ("ot-tracer-traceid", view hexText ctxTraceID)
             : ("ot-tracer-spanid" , view hexText ctxSpanID)
             : ("ot-tracer-sampled", view (ctxSampled . re _Sampled) c)
             : map (over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
 
-        toCtx (TextMap m) = StdContext
+        toCtx m = StdContext
             <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _Hex . knownHex)
             <*> (HashMap.lookup "ot-tracer-spanid"  m >>= preview _Hex . knownHex)
             <*> (HashMap.lookup "ot-tracer-sampled" m >>= preview _Sampled)
             <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
-
-
-instance AsCarrier HttpHeaders StdContext StdContext where
-    _Carrier = prism' fromCtx toCtx
-      where
-        fromCtx
-            = HttpHeaders
-            . map (bimap (CI.mk . encodeUtf8) encodeUtf8)
-            . HashMap.toList
-            . fromTextMap
-            . (review _Carrier :: StdContext -> TextMap StdContext)
-
-        toCtx
-            = (preview _Carrier :: TextMap StdContext -> Maybe StdContext)
-            . TextMap
-            . HashMap.fromList
-            . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
-            . fromHttpHeaders
-
 
 data Env = Env
     { envPRNG     :: GenIO
