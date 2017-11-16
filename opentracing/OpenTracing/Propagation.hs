@@ -7,7 +7,7 @@
 {-# LANGUAGE TupleSections       #-}
 
 module OpenTracing.Propagation
-    ( Propagation(..)
+    ( Propagation(_Headers, _TextMap)
 
     , HasPropagation(propagation)
 
