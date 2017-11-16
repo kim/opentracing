@@ -1,24 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections     #-}
 
 module Main where
 
 import Control.Concurrent     (threadDelay)
-import Control.Lens           (view)
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class (liftIO)
 import OpenTracing
-import OpenTracing.Standard
+import OpenTracing.Standard   (newEnv, stdReporter, stdTracer)
 
 
 main :: IO ()
 main = do
     env <- newEnv (constSampler True)
-    runTracing (Tracing (stdTracer env) stdReporter) $
-        traced (spanOpts "hello" mempty          ) $ \parent ->
-        traced (spanOpts "world" [childOf parent]) $ \_child -> do
+    runTracing (Tracing (stdTracer env) stdReporter otPropagation) $
+        traced__ (spanOpts "hello" mempty          ) $ \parent ->
+        traced__ (spanOpts "world" (childOf parent)) $ \_child ->
             liftIO $ do
                 putStrLn "doing some work..."
                 threadDelay 500000
-
-childOf :: ActiveSpan ctx -> Reference ctx
-childOf = ChildOf . view spanContext

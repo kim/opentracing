@@ -1,10 +1,8 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE StrictData            #-}
 
 module OpenTracing.Zipkin.HttpReporter
@@ -36,13 +34,11 @@ import Data.Monoid
 import Data.Text.Lazy.Encoding   (decodeUtf8)
 import Network.HTTP.Client       hiding (port)
 import Network.HTTP.Types        (hContentType)
-import OpenTracing.Class
 import OpenTracing.Log
 import OpenTracing.Span
 import OpenTracing.Tags
 import OpenTracing.Time
 import OpenTracing.Types
-import OpenTracing.Zipkin        hiding (Env, newEnv)
 import OpenTracing.Zipkin.Thrift
 import OpenTracing.Zipkin.Types
 
@@ -50,7 +46,7 @@ import OpenTracing.Zipkin.Types
 data API = V1 | V2
 
 data Env = Env
-    { envQ   :: TQueue (FinishedSpan ZipkinContext)
+    { envQ   :: TQueue FinishedSpan
     , envRep :: Async ()
     }
 
@@ -93,14 +89,12 @@ withEnv
 withEnv api loc zhost zport logfmt
     = bracket (liftIO $ newEnv api loc zhost zport logfmt) (liftIO . closeEnv)
 
-instance MonadIO m => MonadReport ZipkinContext (ReaderT Env m) where
-    traceReport = report
 
-zipkinHttpReporter :: Env -> Interpret (MonadReport ZipkinContext) MonadIO
-zipkinHttpReporter r = Interpret $ \m -> runReaderT m r
+zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
+zipkinHttpReporter r = flip runReaderT r . report
 
 
-report :: (MonadIO m, MonadReader Env m) => FinishedSpan ZipkinContext -> m ()
+report :: (MonadIO m, MonadReader Env m) => FinishedSpan -> m ()
 report s = do
     q <- asks envQ
     liftIO . atomically $ writeTQueue q s
@@ -110,7 +104,7 @@ reporter
     -> Request
     -> Manager
     -> Endpoint
-    -> TQueue (FinishedSpan ZipkinContext)
+    -> TQueue FinishedSpan
     -> LogFieldsFormatter
     -> IO (Async ())
 reporter api rq mgr loc q logfmt = async . handle drain . forever $
@@ -140,7 +134,7 @@ pop n q = do
         Just v' -> (v' :) <$> pop (n-1) q
 
 
-spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan ZipkinContext -> Encoding
+spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding
 spanE loc logfmt s = pairs $
        pair "name"           (view (spanOperation . to text) s)
     <> pair "id"             (view (spanContext . to ctxSpanID  . hexText . to text) s)
@@ -153,7 +147,7 @@ spanE loc logfmt s = pairs $
             (view (spanTags . to (getTag SpanKindKey)) s)
     <> pair "timestamp"      (view (spanStart . to microsE) s)
     <> pair "duration"       (view (spanDuration . to microsE) s)
-    <> pair "debug"          (view (spanContext . to (hasFlag Debug) . to bool) s)
+    <> pair "debug"          (bool False)
     <> pair "localEndpoint"  (toEncoding loc)
     <> maybe mempty
              (pair "remoteEndpoint")

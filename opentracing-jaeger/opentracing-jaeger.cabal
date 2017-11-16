@@ -15,7 +15,6 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-      OpenTracing.Jaeger
       OpenTracing.Jaeger.ThriftReporter
 
   other-modules:

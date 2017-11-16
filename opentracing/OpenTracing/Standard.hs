@@ -1,24 +1,11 @@
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE StrictData            #-}
-{-# LANGUAGE TemplateHaskell       #-}
 
 module OpenTracing.Standard
-    ( Sampled(..)
-
-    , StdContext
-    , ctxTraceID
-    , ctxSpanID
-    , ctxSampled
-    , ctxBaggage
-
-    , Env
+    ( Env
     , newEnv
 
     , stdTracer
@@ -26,94 +13,21 @@ module OpenTracing.Standard
     )
 where
 
-import           Control.Lens               hiding (Context, (.=))
-import           Control.Monad.Reader
-import           Data.Aeson                 hiding (Error)
-import           Data.Aeson.Encoding
-import           Data.ByteString.Lazy.Char8 (putStrLn)
-import qualified Data.CaseInsensitive       as CI
-import           Data.Foldable              (toList)
-import           Data.Hashable
-import           Data.HashMap.Strict        (HashMap)
-import qualified Data.HashMap.Strict        as HashMap
-import           Data.Monoid
-import           Data.Text                  (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Read             as Text
-import           Data.Word
-import           GHC.Generics               (Generic)
-import           GHC.Stack                  (prettyCallStack)
-import           OpenTracing.Class
-import           OpenTracing.Log
-import           OpenTracing.Propagation
-import           OpenTracing.Sampling       (Sampler (runSampler))
-import           OpenTracing.Span
-import           OpenTracing.Types
-import           Prelude                    hiding (putStrLn)
-import           System.Random.MWC
-
-
-type SpanID = Word64
-
-data StdContext = StdContext
-    { ctxTraceID  :: TraceID
-    , ctxSpanID   :: SpanID
-    , ctxSampled' :: Sampled
-    , _ctxBaggage :: HashMap Text Text
-    } deriving (Eq, Show, Generic)
-
-instance Hashable StdContext
-
-instance HasSampled StdContext where
-    ctxSampled = lens ctxSampled' (\s a -> s { ctxSampled' = a })
-
-instance ToJSON StdContext where
-    toEncoding StdContext{..} = pairs $
-           "trace_id" .= view hexText ctxTraceID
-        <> "span_id"  .= view hexText ctxSpanID
-        <> "sampled"  .= ctxSampled'
-        <> "baggage"  .= _ctxBaggage
-
-    toJSON StdContext{..} = object
-        [ "trace_id" .= view hexText ctxTraceID
-        , "span_id"  .= view hexText ctxSpanID
-        , "sampled"  .= ctxSampled'
-        , "baggage"  .= _ctxBaggage
-        ]
-
-
-instance AsCarrier TextMap StdContext StdContext where
-    _Carrier = prism' fromCtx toCtx
-      where
-        fromCtx c@StdContext{..} = TextMap . HashMap.fromList $
-              ("ot-tracer-traceid", view hexText ctxTraceID)
-            : ("ot-tracer-spanid" , view hexText ctxSpanID)
-            : ("ot-tracer-sampled", view (ctxSampled . re _Sampled) c)
-            : map (over _1 ("ot-baggage-" <>)) (HashMap.toList _ctxBaggage)
-
-        toCtx (TextMap m) = StdContext
-            <$> (HashMap.lookup "ot-tracer-traceid" m >>= preview _Hex . knownHex)
-            <*> (HashMap.lookup "ot-tracer-spanid"  m >>= preview _Hex . knownHex)
-            <*> (HashMap.lookup "ot-tracer-sampled" m >>= preview _Sampled)
-            <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
-
-
-instance AsCarrier HttpHeaders StdContext StdContext where
-    _Carrier = prism' fromCtx toCtx
-      where
-        fromCtx
-            = HttpHeaders
-            . map (bimap (CI.mk . encodeUtf8) encodeUtf8)
-            . HashMap.toList
-            . fromTextMap
-            . (review _Carrier :: StdContext -> TextMap StdContext)
-
-        toCtx
-            = (preview _Carrier :: TextMap StdContext -> Maybe StdContext)
-            . TextMap
-            . HashMap.fromList
-            . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
-            . fromHttpHeaders
+import Control.Lens               hiding (Context, (.=))
+import Control.Monad.Reader
+import Data.Aeson                 hiding (Error)
+import Data.Aeson.Encoding
+import Data.ByteString.Lazy.Char8 (putStrLn)
+import Data.Foldable              (toList)
+import Data.Monoid
+import Data.Word
+import GHC.Stack                  (prettyCallStack)
+import OpenTracing.Log
+import OpenTracing.Sampling       (Sampler (runSampler))
+import OpenTracing.Span
+import OpenTracing.Types
+import Prelude                    hiding (putStrLn)
+import System.Random.MWC
 
 
 data Env = Env
@@ -126,76 +40,73 @@ newEnv samp = do
     prng <- liftIO createSystemRandom
     return Env { envPRNG = prng, _envSampler = samp }
 
-instance MonadIO m => MonadTrace StdContext (ReaderT Env m) where
-    traceStart = start
+stdTracer :: MonadIO m => Env -> SpanOpts -> m Span
+stdTracer r = flip runReaderT r . start
 
-instance MonadIO m => MonadReport StdContext m where
-    traceReport = report
-
-stdTracer :: Env -> Interpret (MonadTrace StdContext) MonadIO
-stdTracer r = Interpret $ \m -> runReaderT m r
-
-stdReporter :: Interpret (MonadReport StdContext) MonadIO
-stdReporter = Interpret id
+stdReporter :: MonadIO m => FinishedSpan -> m ()
+stdReporter f = liftIO $ report f
 
 --------------------------------------------------------------------------------
 -- Internal
 
-start :: (MonadIO m, MonadReader Env m) => SpanOpts StdContext -> m (Span StdContext)
-start so@SpanOpts{..} = do
-    ctx <- case spanOptRefs of
-               []    -> freshContext so
-               (p:_) -> fromParent p
+start :: (MonadIO m, MonadReader Env m) => SpanOpts -> m Span
+start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
+    ctx <- do
+        p <- findParent <$> liftIO (freezeRefs spanOptRefs)
+        case p of
+            Nothing -> freshContext so
+            Just p' -> fromParent   (refCtx p')
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
 
-report :: MonadIO m => FinishedSpan StdContext -> m ()
-report = liftIO . putStrLn . encodingToLazyByteString . spanE
+report :: FinishedSpan -> IO ()
+report = putStrLn . encodingToLazyByteString . spanE
 
 newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
 newTraceID = asks envPRNG >>= fmap (TraceID Nothing) . liftIO . uniform
 
-newSpanID :: (MonadIO m, MonadReader Env m) => m SpanID
+newSpanID :: (MonadIO m, MonadReader Env m) => m Word64
 newSpanID = asks envPRNG >>= liftIO . uniform
 
-_Sampled :: Prism' Text Sampled
-_Sampled = prism' enc dec
-    where
-      enc = \case Sampled -> "1"
-                  _       -> "0"
-
-      dec = either (const Nothing) id
-          . fmap (\(x,_) -> Just $ if x == (1 :: Word8) then Sampled else NotSampled)
-          . Text.decimal
-{-# INLINE _Sampled #-}
-
-freshContext :: (MonadIO m, MonadReader Env m) => SpanOpts StdContext -> m StdContext
+freshContext
+    :: ( MonadIO         m
+       , MonadReader Env m
+       )
+    => SpanOpts
+    -> m SpanContext
 freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     trid <- newTraceID
     spid <- newSpanID
     smpl <- asks _envSampler
 
     sampled' <- case spanOptSampled of
-        Nothing -> view sampled <$> (runSampler smpl) trid spanOptOperation
+        Nothing -> view _IsSampled <$> runSampler smpl trid spanOptOperation
         Just s  -> pure s
 
-    return StdContext
-        { ctxTraceID  = trid
-        , ctxSpanID   = spid
-        , ctxSampled' = sampled'
-        , _ctxBaggage = mempty
+    return SpanContext
+        { ctxTraceID      = trid
+        , ctxSpanID       = spid
+        , ctxParentSpanID = Nothing
+        , _ctxSampled     = sampled'
+        , _ctxBaggage     = mempty
         }
 
-fromParent :: (MonadIO m, MonadReader Env m) => Reference StdContext -> m StdContext
+fromParent
+    :: ( MonadIO         m
+       , MonadReader Env m
+       )
+    => SpanContext
+    -> m SpanContext
 fromParent p = do
     spid <- newSpanID
-    return StdContext
-        { ctxTraceID  = ctxTraceID (refCtx p)
-        , ctxSpanID   = spid
-        , ctxSampled' = view (to refCtx . ctxSampled) p
-        , _ctxBaggage = mempty
+    return SpanContext
+        { ctxTraceID      = ctxTraceID p
+        , ctxSpanID       = spid
+        , ctxParentSpanID = Just (ctxSpanID p)
+        , _ctxSampled     = view ctxSampled p
+        , _ctxBaggage     = view ctxBaggage p
         }
 
-spanE :: FinishedSpan StdContext -> Encoding
+spanE :: FinishedSpan -> Encoding
 spanE s = pairs $
        pair "operation"  (text $ view spanOperation s)
     <> pair "start"      (utcTime $ view spanStart s)
@@ -205,7 +116,7 @@ spanE s = pairs $
     <> pair "tags"       (toEncoding $ view spanTags s)
     <> pair "logs"       (list logRecE . reverse $ view spanLogs s)
 
-refE :: Reference StdContext -> Encoding
+refE :: Reference -> Encoding
 refE (ChildOf     ctx) = pairs . pair "child_of"     . toEncoding $ ctx
 refE (FollowsFrom ctx) = pairs . pair "follows_from" . toEncoding $ ctx
 
@@ -222,5 +133,3 @@ logFieldE f = pairs . pair (logFieldLabel f) $ case f of
     ErrKind    x -> text x
     ErrObj     x -> string . show $ x
     LogField _ x -> string . show $ x
-
-makeLenses ''StdContext
