@@ -30,7 +30,6 @@ import           OpenTracing.Log
 import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
-import           OpenTracing.Zipkin
 import           OpenTracing.Zipkin.Types (Endpoint (..))
 import qualified Thrift
 import           Thrift.Protocol.Binary
