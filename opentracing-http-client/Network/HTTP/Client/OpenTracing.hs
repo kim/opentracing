@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Network.HTTP.Client.OpenTracing
@@ -7,7 +6,7 @@ module Network.HTTP.Client.OpenTracing
     )
 where
 
-import           Control.Lens                 (over, review, view)
+import           Control.Lens                 (over, view)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.Semigroup               ((<>))
@@ -36,31 +35,26 @@ import           Prelude                      hiding (span)
 -- :}
 --
 httpTraced
-    :: ( HasSampled  ctx
-       , Propagation ctx
-       , HasTracing  r r ctx ctx
+    :: ( HasTracing  r
        , MonadReader r m
        , MonadIO     m
        )
-    => SpanRefs ctx
+    => SpanRefs
     -> Request
     -> Manager
     -> (Request -> Manager -> IO a)
-    -> m (Traced ctx a)
+    -> m (Traced a)
 httpTraced refs req mgr f = do
     t <- view tracing
     liftIO $ httpTraced' t refs req mgr f
 
 httpTraced'
-    :: ( HasSampled  ctx
-       , Propagation ctx
-       )
-    => Tracing  ctx
-    -> SpanRefs ctx
+    :: Tracing
+    -> SpanRefs
     -> Request
     -> Manager
     -> (Request -> Manager -> IO a)
-    -> IO (Traced ctx a)
+    -> IO (Traced a)
 httpTraced' t refs req mgr f = do
     sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
 
@@ -91,5 +85,5 @@ httpTraced' t refs req mgr f = do
         }
 
     inject rq ctx = rq
-        { requestHeaders = requestHeaders rq <> review _Headers ctx
+        { requestHeaders = requestHeaders rq <> traceInject t ctx
         }

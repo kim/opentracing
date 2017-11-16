@@ -14,7 +14,6 @@ import           Control.Monad.Reader
 import           Data.Bool                      (bool)
 import           Data.Foldable
 import           Data.Int                       (Int64)
-import           Data.Maybe                     (fromMaybe)
 import           Data.Text                      (Text)
 import           Data.Text.Lens
 import qualified Data.Vector                    as Vector
@@ -27,7 +26,6 @@ import           Network.Socket
 import           Network.Socket.ByteString.Lazy (sendAll)
 import           OpenTracing.Log
 import           OpenTracing.Span
-import           OpenTracing.Standard
 import           OpenTracing.Tags               (TagVal (..), fromTags)
 import           OpenTracing.Time
 import           OpenTracing.Types
@@ -64,11 +62,11 @@ openUDPTransport = do
 
 
 
-jaegerThriftReporter :: MonadIO m => UDP -> FinishedSpan StdContext -> m ()
+jaegerThriftReporter :: MonadIO m => UDP -> FinishedSpan -> m ()
 jaegerThriftReporter r = flip runReaderT r . report
 
 
-report :: (MonadIO m, MonadReader UDP m) => FinishedSpan StdContext -> m ()
+report :: (MonadIO m, MonadReader UDP m) => FinishedSpan -> m ()
 report s = do
     proto <- Thrift.CompactProtocol <$> ask
     let spans = Vector.singleton . toThriftSpan $ s
@@ -76,13 +74,12 @@ report s = do
         Thrift.emitBatch (undefined, proto)
                          Thrift.default_Batch { batch_spans = spans }
 
-toThriftSpan :: FinishedSpan StdContext -> Thrift.Span
+toThriftSpan :: FinishedSpan -> Thrift.Span
 toThriftSpan s = Thrift.Span
     { span_traceIdLow    = view (spanContext . to traceIdLo') s
     , span_traceIdHigh   = view (spanContext . to traceIdHi') s
     , span_spanId        = view (spanContext . to ctxSpanID') s
-    , span_parentSpanId  = fromMaybe 0
-                         . fmap (ctxSpanID' . refCtx)
+    , span_parentSpanId  = maybe 0 (ctxSpanID' . refCtx)
                          . findParent
                          $ view spanRefs s
     , span_operationName = view (spanOperation . lazy) s
@@ -94,7 +91,7 @@ toThriftSpan s = Thrift.Span
                                 s
     , span_flags         = view ( spanContext
                                 . ctxSampled
-                                . re sampled
+                                . re _IsSampled
                                 . to (bool 0 1)
                                 )
                                 s
@@ -110,7 +107,7 @@ toThriftSpan s = Thrift.Span
                          $ view spanLogs s
     }
 
-toThriftSpanRef :: Reference StdContext -> Thrift.SpanRef
+toThriftSpanRef :: Reference -> Thrift.SpanRef
 toThriftSpanRef ref = Thrift.SpanRef
     { spanRef_refType     = toThriftRefType ref
     , spanRef_traceIdLow  = traceIdLo' (refCtx ref)
@@ -118,7 +115,7 @@ toThriftSpanRef ref = Thrift.SpanRef
     , spanRef_spanId      = ctxSpanID' (refCtx ref)
     }
 
-toThriftRefType :: Reference ctx -> Thrift.SpanRefType
+toThriftRefType :: Reference -> Thrift.SpanRefType
 toThriftRefType (ChildOf     _) = Thrift.CHILD_OF
 toThriftRefType (FollowsFrom _) = Thrift.FOLLOWS_FROM
 
@@ -150,11 +147,11 @@ toThriftLog r = Thrift.Log
         ErrKind    v -> v
         ErrObj     v -> view packed (show v)
 
-traceIdLo' :: StdContext -> Int64
+traceIdLo' :: SpanContext -> Int64
 traceIdLo' = fromIntegral . traceIdLo . ctxTraceID
 
-traceIdHi' :: StdContext -> Int64
+traceIdHi' :: SpanContext -> Int64
 traceIdHi' = maybe 0 fromIntegral . traceIdHi . ctxTraceID
 
-ctxSpanID' :: StdContext -> Int64
+ctxSpanID' :: SpanContext -> Int64
 ctxSpanID' = fromIntegral . ctxSpanID

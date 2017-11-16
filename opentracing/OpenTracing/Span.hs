@@ -4,13 +4,18 @@
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE NamedFieldPuns         #-}
+{-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE RecordWildCards        #-}
 {-# LANGUAGE StrictData             #-}
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TupleSections          #-}
 
 module OpenTracing.Span
-    ( Span
+    ( SpanContext(..)
+    , ctxSampled
+    , ctxBaggage
+
+    , Span
     , newSpan
 
     , HasSpanFields
@@ -46,31 +51,56 @@ module OpenTracing.Span
     , freezeRefs
 
     , Sampled(..)
-    , HasSampled(..)
+    , _IsSampled
     , sampled
 
     , Traced(..)
     )
 where
 
-import Control.Lens           hiding (op, pre)
+import Control.Lens           hiding (op, pre, (.=))
 import Control.Monad.IO.Class
-import Data.Aeson             (ToJSON (..))
-import Data.Aeson.Encoding    hiding (bool)
+import Data.Aeson             (ToJSON (..), object, (.=))
+import Data.Aeson.Encoding    (int, pairs)
 import Data.Bool              (bool)
 import Data.Foldable
+import Data.HashMap.Strict    (HashMap)
 import Data.IORef
 import Data.Monoid
 import Data.Text              (Text)
 import Data.Time.Clock
+import Data.Word
 import OpenTracing.Log
 import OpenTracing.Tags
+import OpenTracing.Types
 import Prelude                hiding (span)
 
 
-data Traced ctx a = Traced
+data SpanContext = SpanContext
+    { ctxTraceID       :: TraceID
+    , ctxSpanID        :: Word64
+    , ctxParentSpanID  :: Maybe Word64
+    , _ctxSampled      :: Sampled
+    , _ctxBaggage      :: HashMap Text Text
+    }
+
+instance ToJSON SpanContext where
+    toEncoding SpanContext{..} = pairs $
+           "trace_id" .= view hexText ctxTraceID
+        <> "span_id"  .= view hexText ctxSpanID
+        <> "sampled"  .= _ctxSampled
+        <> "baggage"  .= _ctxBaggage
+
+    toJSON SpanContext{..} = object
+        [ "trace_id" .= view hexText ctxTraceID
+        , "span_id"  .= view hexText ctxSpanID
+        , "sampled"  .= _ctxSampled
+        , "baggage"  .= _ctxBaggage
+        ]
+
+data Traced a = Traced
     { tracedResult :: a
-    , tracedSpan   :: ~(FinishedSpan ctx)
+    , tracedSpan   :: ~FinishedSpan
     }
 
 data Sampled = NotSampled | Sampled
@@ -80,19 +110,16 @@ instance ToJSON Sampled where
     toJSON     = toJSON . fromEnum
     toEncoding = int . fromEnum
 
-class HasSampled ctx where
-    ctxSampled :: Lens' ctx Sampled
-
-sampled :: Iso' Bool Sampled
-sampled = iso (bool NotSampled Sampled) $ \case
+_IsSampled :: Iso' Bool Sampled
+_IsSampled= iso (bool NotSampled Sampled) $ \case
     Sampled    -> True
     NotSampled -> False
 
-data Reference ctx
-    = ChildOf     { refCtx :: ctx }
-    | FollowsFrom { refCtx :: ctx }
+data Reference
+    = ChildOf     { refCtx :: SpanContext }
+    | FollowsFrom { refCtx :: SpanContext }
 
-findParent :: Foldable t => t (Reference ctx) -> Maybe (Reference ctx)
+findParent :: Foldable t => t Reference -> Maybe Reference
 findParent = foldl' go Nothing
   where
     go Nothing  y = Just y
@@ -103,13 +130,13 @@ findParent = foldl' go Nothing
     prec _               _               = EQ
 
 
-data SpanRefs ctx = SpanRefs
-    { _refActiveParents :: [ActiveSpan   ctx]
-    , _refPredecessors  :: [FinishedSpan ctx]
-    , _refPropagated    :: [Reference    ctx]
+data SpanRefs = SpanRefs
+    { _refActiveParents :: [ActiveSpan  ]
+    , _refPredecessors  :: [FinishedSpan]
+    , _refPropagated    :: [Reference   ]
     }
 
-instance Monoid (SpanRefs ctx) where
+instance Monoid SpanRefs where
     mempty = SpanRefs mempty mempty mempty
 
     (SpanRefs par pre pro) `mappend` (SpanRefs par' pre' pro') = SpanRefs
@@ -118,29 +145,29 @@ instance Monoid (SpanRefs ctx) where
         , _refPropagated    = pro <> pro'
         }
 
-childOf :: ActiveSpan ctx -> SpanRefs ctx
+childOf :: ActiveSpan -> SpanRefs
 childOf a = mempty { _refActiveParents = [a] }
 
-followsFrom :: FinishedSpan ctx -> SpanRefs ctx
+followsFrom :: FinishedSpan -> SpanRefs
 followsFrom a = mempty { _refPredecessors = [a] }
 
-freezeRefs :: SpanRefs ctx -> IO [Reference ctx]
+freezeRefs :: SpanRefs -> IO [Reference]
 freezeRefs SpanRefs{..} = do
     a <- traverse (fmap (ChildOf . _sContext) . readActiveSpan) _refActiveParents
     let b = map (FollowsFrom . _fContext) _refPredecessors
     return $ a <> b <> _refPropagated
 
 
-data SpanOpts ctx = SpanOpts
+data SpanOpts = SpanOpts
     { spanOptOperation :: Text
-    , spanOptRefs      :: SpanRefs ctx
+    , spanOptRefs      :: SpanRefs
     , spanOptTags      :: [Tag]
     , spanOptSampled   :: Maybe Sampled
     -- ^ Force 'Span' to be sampled (or not).
     -- 'Nothing' denotes leave decision to 'Sampler' (the default)
     }
 
-spanOpts :: Text -> SpanRefs ctx -> SpanOpts ctx
+spanOpts :: Text -> SpanRefs -> SpanOpts
 spanOpts op refs = SpanOpts
     { spanOptOperation = op
     , spanOptRefs      = refs
@@ -148,12 +175,12 @@ spanOpts op refs = SpanOpts
     , spanOptSampled   = Nothing
     }
 
-data Span ctx = Span
-    { _sContext   :: ctx
+data Span = Span
+    { _sContext   :: SpanContext
     , _sOperation :: Text
     , _sStart     :: UTCTime
     , _sTags      :: Tags
-    , _sRefs      :: SpanRefs ctx
+    , _sRefs      :: SpanRefs
     , _sLogs      :: [LogRecord]
     }
 
@@ -161,11 +188,11 @@ newSpan
     :: ( MonadIO  m
        , Foldable t
        )
-    => ctx
+    => SpanContext
     -> Text
-    -> SpanRefs ctx
+    -> SpanRefs
     -> t Tag
-    -> m (Span ctx)
+    -> m Span
 newSpan ctx op refs ts = do
     t <- liftIO getCurrentTime
     pure Span
@@ -178,30 +205,30 @@ newSpan ctx op refs ts = do
         }
 
 
-newtype ActiveSpan ctx = ActiveSpan { fromActiveSpan :: IORef (Span ctx) }
+newtype ActiveSpan = ActiveSpan { fromActiveSpan :: IORef Span }
 
-mkActive :: Span ctx -> IO (ActiveSpan ctx)
+mkActive :: Span -> IO ActiveSpan
 mkActive = fmap ActiveSpan . newIORef
 
-modifyActiveSpan :: ActiveSpan ctx -> (Span ctx -> Span ctx) -> IO ()
+modifyActiveSpan :: ActiveSpan -> (Span -> Span) -> IO ()
 modifyActiveSpan ActiveSpan{fromActiveSpan} f =
     atomicModifyIORef' fromActiveSpan ((,()) . f)
 
-readActiveSpan :: ActiveSpan ctx -> IO (Span ctx)
+readActiveSpan :: ActiveSpan -> IO Span
 readActiveSpan = readIORef . fromActiveSpan
 
 
-data FinishedSpan ctx = FinishedSpan
-    { _fContext   :: ctx
+data FinishedSpan = FinishedSpan
+    { _fContext   :: SpanContext
     , _fOperation :: Text
     , _fStart     :: UTCTime
     , _fDuration  :: NominalDiffTime
     , _fTags      :: Tags
-    , _fRefs      :: [Reference ctx]
+    , _fRefs      :: [Reference]
     , _fLogs      :: [LogRecord]
     }
 
-traceFinish :: MonadIO m => Span ctx -> m (FinishedSpan ctx)
+traceFinish :: MonadIO m => Span -> m FinishedSpan
 traceFinish s = do
     (t,refs) <- liftIO $ (,) <$> getCurrentTime <*> freezeRefs (_sRefs s)
     pure FinishedSpan
@@ -214,48 +241,57 @@ traceFinish s = do
         , _fLogs      = _sLogs s
         }
 
+makeLenses ''SpanContext
 makeLenses ''Span
 makeLenses ''FinishedSpan
 makeLenses ''SpanRefs
 
-class HasSpanFields a ctx | a -> ctx where
-    spanContext   :: Lens' a ctx
+class HasSpanFields a where
+    spanContext   :: Lens' a SpanContext
     spanOperation :: Lens' a Text
     spanStart     :: Lens' a UTCTime
     spanTags      :: Lens' a Tags
     spanLogs      :: Lens' a [LogRecord]
 
-instance HasSpanFields (Span ctx) ctx where
+instance HasSpanFields Span where
     spanContext   = sContext
     spanOperation = sOperation
     spanStart     = sStart
     spanTags      = sTags
     spanLogs      = sLogs
 
-instance HasSpanFields (FinishedSpan ctx) ctx where
+instance HasSpanFields FinishedSpan where
     spanContext   = fContext
     spanOperation = fOperation
     spanStart     = fStart
     spanTags      = fTags
     spanLogs      = fLogs
 
+class HasSampled a where
+    sampled :: Lens' a Sampled
 
-instance HasSampled ctx => HasSampled (Span ctx) where
-    ctxSampled = spanContext . ctxSampled
+instance HasSampled Sampled where
+    sampled = id
 
-instance HasSampled ctx => HasSampled (FinishedSpan ctx) where
-    ctxSampled = spanContext . ctxSampled
+instance HasSampled SpanContext where
+    sampled = ctxSampled
+
+instance HasSampled Span where
+    sampled = spanContext . sampled
+
+instance HasSampled FinishedSpan where
+    sampled = spanContext . sampled
 
 
 class HasRefs s a | s -> a where
     spanRefs :: Lens' s a
 
-instance HasRefs (Span ctx) (SpanRefs ctx) where
+instance HasRefs Span SpanRefs where
     spanRefs = sRefs
 
-instance HasRefs (FinishedSpan ctx) [Reference ctx] where
+instance HasRefs FinishedSpan [Reference] where
     spanRefs = fRefs
 
 
-spanDuration :: Lens' (FinishedSpan ctx) NominalDiffTime
+spanDuration :: Lens' FinishedSpan NominalDiffTime
 spanDuration = fDuration
