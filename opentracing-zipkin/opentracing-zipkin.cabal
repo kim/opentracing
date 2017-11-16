@@ -41,7 +41,6 @@ library
     , stm
     , text
     , thrift
-    , time
     , unordered-containers
     , vector
 
