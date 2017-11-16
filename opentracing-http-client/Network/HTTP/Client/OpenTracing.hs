@@ -1,11 +1,14 @@
-{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
 
-module Network.HTTP.Client.OpenTracing where
+module Network.HTTP.Client.OpenTracing
+    ( httpTraced
+    , httpTraced'
+    )
+where
 
 import           Control.Lens                 (over, view)
-import           Control.Monad.IO.Class       (MonadIO)
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
 import           Data.Semigroup               ((<>))
 import qualified Data.Text                    as Text
 import           Data.Text.Encoding           (decodeUtf8)
@@ -21,25 +24,38 @@ import           Prelude                      hiding (span)
 -- |
 --
 -- >>> :{
+-- mgr <- newManager defaultManagerSettings
+-- rq1 <- parseRequest "http://service1.local/foo"
+-- rq2 <- parseRequest "http://service2.local/bar"
 -- traced (spanOpts "toplevel" mempty) $ \parent -> do
---     rpc1 <- httpTraced tracing (childOf parent) req mgr httpLbs
---     rpc2 <- httpTraced tracing
---                        (childOf parent <> followsFrom (tracedSpan rpc1))
---                        req mgr $ \r m ->
---                 withResponse r m brConsume
+--     rpc1 <- httpTraced (childOf parent) rq1 mgr httpLbs
+--     rpc2 <- httpTraced (childOf parent <> followsFrom (tracedSpan rpc1))
+--                        rq2 mgr httpLbs
 --     return [tracedResult rpc1, tracedResult rpc2]
 -- :}
+--
 httpTraced
-    :: ( HasSampled ctx
-       , AsCarrier  HttpHeaders ctx ctx
+    :: ( HasTracing  r
+       , MonadReader r m
+       , MonadIO     m
        )
-    => Tracing ctx MonadIO
-    -> SpanRefs ctx
+    => SpanRefs
     -> Request
     -> Manager
     -> (Request -> Manager -> IO a)
-    -> IO (Traced ctx a)
-httpTraced tracing refs req mgr f = do
+    -> m (Traced a)
+httpTraced refs req mgr f = do
+    t <- view tracing
+    liftIO $ httpTraced' t refs req mgr f
+
+httpTraced'
+    :: Tracing
+    -> SpanRefs
+    -> Request
+    -> Manager
+    -> (Request -> Manager -> IO a)
+    -> IO (Traced a)
+httpTraced' t refs req mgr f = do
     sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
 
     let opt = SpanOpts
@@ -54,7 +70,7 @@ httpTraced tracing refs req mgr f = do
                 ]
             }
 
-    traced' tracing opt $ \span ->
+    traced' t opt $ \span ->
         let mgr' = modMgr span
          in f (req { requestManagerOverride = Just mgr' }) mgr'
   where
@@ -69,5 +85,5 @@ httpTraced tracing refs req mgr f = do
         }
 
     inject rq ctx = rq
-        { requestHeaders = requestHeaders rq <> fromHttpHeaders (traceInject ctx)
+        { requestHeaders = requestHeaders rq <> traceInject t ctx
         }

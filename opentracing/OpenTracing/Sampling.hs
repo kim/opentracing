@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData      #-}
-{-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE ViewPatterns    #-}
 
 module OpenTracing.Sampling

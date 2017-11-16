@@ -31,7 +31,6 @@ import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
 import           OpenTracing.Zipkin
-    (Flag (Debug), ZipkinContext (..), hasFlag)
 import           OpenTracing.Zipkin.Types (Endpoint (..))
 import qualified Thrift
 import           Thrift.Protocol.Binary
@@ -44,7 +43,7 @@ import qualified ZipkinCore_Types         as Thrift
 toThriftSpan
     :: Endpoint
     -> LogFieldsFormatter
-    -> FinishedSpan ZipkinContext
+    -> FinishedSpan
     -> Thrift.Span
 toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
     { Thrift.span_trace_id           = view (spanContext . to ctxTraceID . to traceIdLo . to fromIntegral) s
@@ -54,7 +53,7 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
     , Thrift.span_parent_id          = view (spanContext . to ctxParentSpanID . to (fmap fromIntegral)) s
     , Thrift.span_annotations        = annotations
     , Thrift.span_binary_annotations = binaryAnnotations
-    , Thrift.span_debug              = view (spanContext . to (hasFlag Debug) . re _Just) s
+    , Thrift.span_debug              = Nothing
     , Thrift.span_timestamp          = Just tstart
     , Thrift.span_duration           = view (spanDuration . to micros . re _Just) s
     }

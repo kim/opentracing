@@ -29,7 +29,6 @@ library
     , async
     , base
     , bytestring
-    , case-insensitive
     , containers
     , hashable
     , http-client
