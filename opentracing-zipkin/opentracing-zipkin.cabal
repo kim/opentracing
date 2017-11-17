@@ -15,7 +15,6 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-      OpenTracing.Zipkin
       OpenTracing.Zipkin.HttpReporter
       OpenTracing.Zipkin.Thrift
       OpenTracing.Zipkin.Types
@@ -29,7 +28,6 @@ library
     , async
     , base
     , bytestring
-    , containers
     , hashable
     , http-client
     , http-types
@@ -43,7 +41,6 @@ library
     , stm
     , text
     , thrift
-    , time
     , unordered-containers
     , vector
 

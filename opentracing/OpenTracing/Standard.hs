@@ -2,11 +2,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE StrictData            #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module OpenTracing.Standard
     ( Env
     , newEnv
+    , envTraceID128bit
+    , envSampler
 
     , stdTracer
     , stdReporter
@@ -31,14 +35,17 @@ import System.Random.MWC
 
 
 data Env = Env
-    { envPRNG     :: GenIO
-    , _envSampler :: Sampler
+    { envPRNG           :: GenIO
+    , _envSampler       :: Sampler
+    , _envTraceID128bit :: Bool
     }
 
 newEnv :: MonadIO m => Sampler -> m Env
 newEnv samp = do
     prng <- liftIO createSystemRandom
-    return Env { envPRNG = prng, _envSampler = samp }
+    return Env { envPRNG = prng, _envSampler = samp, _envTraceID128bit = True }
+
+makeLenses ''Env
 
 stdTracer :: MonadIO m => Env -> SpanOpts -> m Span
 stdTracer r = flip runReaderT r . start
@@ -62,7 +69,14 @@ report :: FinishedSpan -> IO ()
 report = putStrLn . encodingToLazyByteString . spanE
 
 newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
-newTraceID = asks envPRNG >>= fmap (TraceID Nothing) . liftIO . uniform
+newTraceID = do
+    Env{..} <- ask
+    hi <- if _envTraceID128bit then
+              Just <$> liftIO (uniform envPRNG)
+          else
+              pure Nothing
+    lo <- liftIO $ uniform envPRNG
+    return TraceID { traceIdHi = hi, traceIdLo = lo }
 
 newSpanID :: (MonadIO m, MonadReader Env m) => m Word64
 newSpanID = asks envPRNG >>= liftIO . uniform
@@ -76,7 +90,7 @@ freshContext
 freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
     trid <- newTraceID
     spid <- newSpanID
-    smpl <- asks _envSampler
+    smpl <- view envSampler
 
     sampled' <- case spanOptSampled of
         Nothing -> view _IsSampled <$> runSampler smpl trid spanOptOperation
