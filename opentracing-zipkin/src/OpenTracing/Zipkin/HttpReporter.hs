@@ -1,6 +1,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE StrictData        #-}
 
 module OpenTracing.Zipkin.HttpReporter
@@ -9,6 +10,9 @@ module OpenTracing.Zipkin.HttpReporter
     , newEnv
     , closeEnv
     , withEnv
+
+    , ZipkinAddr(..)
+    , defaultZipkinAddr
 
     , zipkinHttpReporter
 
@@ -42,25 +46,39 @@ data API = V1 | V2
 
 type Env = BatchEnv
 
--- XXX: support https
-newEnv :: API -> Endpoint -> String -> Port -> LogFieldsFormatter -> IO Env
-newEnv api loc zhost zport logfmt = do
+data ZipkinAddr = ZipkinAddr
+    { zipkinHost   :: String
+    , zipkinPort   :: Port
+    , zipkinSecure :: Bool
+    }
+
+defaultZipkinAddr :: ZipkinAddr
+defaultZipkinAddr = ZipkinAddr
+    { zipkinHost   = "127.0.0.1"
+    , zipkinPort   = 9411
+    , zipkinSecure = False
+    }
+
+
+newEnv :: Manager -> API -> Endpoint -> ZipkinAddr -> LogFieldsFormatter -> IO Env
+newEnv mgr api loc ZipkinAddr{..} logfmt = do
     rq  <- mkReq
-    mgr <- newManager defaultManagerSettings
-    newBatchEnv 100 (reporter api rq mgr loc logfmt)
+    newBatchEnv 100 $ reporter api rq mgr loc logfmt
   where
     mkReq = do
-        let rqBase = "POST http://" <> zhost <> ":" <> show zport
+        let rqBase = "POST http://" <> zipkinHost <> ":" <> show zipkinPort
         case api of
             V1 -> do
                 rq <- parseRequest $ rqBase <> "/api/v1/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/x-thrift")]
+                    , secure         = zipkinSecure
                     }
             V2 -> do
                 rq <- parseRequest $ rqBase <> "/api/v2/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/json")]
+                    , secure         = zipkinSecure
                     }
 
 closeEnv :: Env -> IO ()
@@ -70,15 +88,15 @@ withEnv
     :: ( MonadIO   m
        , MonadMask m
        )
-    => API
+    => Manager
+    -> API
     -> Endpoint
-    -> String
-    -> Port
+    -> ZipkinAddr
     -> LogFieldsFormatter
     -> (Env -> m a)
     -> m a
-withEnv api loc zhost zport logfmt =
-    bracket (liftIO $ newEnv api loc zhost zport logfmt) (liftIO . closeEnv)
+withEnv mgr api loc addr logfmt =
+    bracket (liftIO $ newEnv mgr api loc addr logfmt) (liftIO . closeEnv)
 
 
 zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
