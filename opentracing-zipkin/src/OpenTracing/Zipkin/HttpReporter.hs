@@ -1,9 +1,7 @@
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE StrictData        #-}
 
 module OpenTracing.Zipkin.HttpReporter
     ( API(..)
@@ -18,14 +16,10 @@ module OpenTracing.Zipkin.HttpReporter
     )
 where
 
-import Control.Concurrent.Async
-import Control.Concurrent.STM
-import Control.Exception         (AsyncException (ThreadKilled))
-import Control.Exception.Safe
 import Control.Lens              hiding (Context)
-import Control.Monad             (forever, void)
+import Control.Monad             (void)
+import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Reader
 import Data.Aeson                hiding (Error)
 import Data.Aeson.Encoding
 import Data.ByteString.Builder   (toLazyByteString)
@@ -35,6 +29,7 @@ import Data.Text.Lazy.Encoding   (decodeUtf8)
 import Network.HTTP.Client       hiding (port)
 import Network.HTTP.Types        (hContentType)
 import OpenTracing.Log
+import OpenTracing.Reporting
 import OpenTracing.Span
 import OpenTracing.Tags
 import OpenTracing.Time
@@ -45,18 +40,14 @@ import OpenTracing.Zipkin.Types
 
 data API = V1 | V2
 
-data Env = Env
-    { envQ   :: TQueue FinishedSpan
-    , envRep :: Async ()
-    }
+type Env = BatchEnv
 
 -- XXX: support https
 newEnv :: API -> Endpoint -> String -> Port -> LogFieldsFormatter -> IO Env
 newEnv api loc zhost zport logfmt = do
-    q   <- newTQueueIO
     rq  <- mkReq
     mgr <- newManager defaultManagerSettings
-    Env q <$> reporter api rq mgr loc q logfmt
+    newBatchEnv 100 (reporter api rq mgr loc logfmt)
   where
     mkReq = do
         let rqBase = "POST http://" <> zhost <> ":" <> show zport
@@ -73,7 +64,7 @@ newEnv api loc zhost zport logfmt = do
                     }
 
 closeEnv :: Env -> IO ()
-closeEnv = cancel . envRep
+closeEnv = closeBatchEnv
 
 withEnv
     :: ( MonadIO   m
@@ -86,52 +77,27 @@ withEnv
     -> LogFieldsFormatter
     -> (Env -> m a)
     -> m a
-withEnv api loc zhost zport logfmt
-    = bracket (liftIO $ newEnv api loc zhost zport logfmt) (liftIO . closeEnv)
+withEnv api loc zhost zport logfmt =
+    bracket (liftIO $ newEnv api loc zhost zport logfmt) (liftIO . closeEnv)
 
 
 zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
-zipkinHttpReporter r = flip runReaderT r . report
-
-
-report :: (MonadIO m, MonadReader Env m) => FinishedSpan -> m ()
-report s = do
-    q <- asks envQ
-    liftIO . atomically $ writeTQueue q s
+zipkinHttpReporter = batchReporter
 
 reporter
     :: API
     -> Request
     -> Manager
     -> Endpoint
-    -> TQueue FinishedSpan
     -> LogFieldsFormatter
-    -> IO (Async ())
-reporter api rq mgr loc q logfmt = async . handle drain . forever $
-    go (void . atomically $ peekTQueue q)
+    -> [FinishedSpan]
+    -> IO ()
+reporter api rq mgr loc logfmt spans =
+    void $ httpLbs rq { requestBody = body } mgr -- XXX: check response status
   where
-    go onEmpty = do
-        batch <- atomically $ pop 100 q
-        case batch of
-            [] -> onEmpty
-            xs -> mask_ $
-                    void (httpLbs rq { requestBody = body xs } mgr) -- XXX: check response status
-                        `catchAny` const (return ()) -- XXX: log something
-
-    body xs = RequestBodyLBS $ case api of
-        V1 -> thriftEncodeSpans $ map (toThriftSpan loc logfmt) xs
-        V2 -> encodingToLazyByteString $ list (spanE loc logfmt) xs
-
-    drain ThreadKilled = go (return ())
-    drain e            = throwM e
-
-pop :: Int -> TQueue a -> STM [a]
-pop 0 _ = pure []
-pop n q = do
-    v <- tryReadTQueue q
-    case v of
-        Nothing -> pure []
-        Just v' -> (v' :) <$> pop (n-1) q
+    body = RequestBodyLBS $ case api of
+        V1 -> thriftEncodeSpans $ map (toThriftSpan loc logfmt) spans
+        V2 -> encodingToLazyByteString $ list (spanE loc logfmt) spans
 
 
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding

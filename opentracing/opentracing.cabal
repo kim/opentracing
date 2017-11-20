@@ -18,6 +18,7 @@ library
       OpenTracing
       OpenTracing.Log
       OpenTracing.Propagation
+      OpenTracing.Reporting
       OpenTracing.Sampling
       OpenTracing.Span
       OpenTracing.Standard
@@ -34,13 +35,13 @@ library
     , case-insensitive
     , clock
     , containers
-    , exceptions
     , http-client
     , http-types
     , iproute
     , lens
     , mtl
     , mwc-random
+    , safe-exceptions
     , semigroups
     , stm
     , text

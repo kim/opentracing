@@ -25,20 +25,17 @@ library
 
   build-depends:
       aeson
-    , async
     , base
     , bytestring
+    , exceptions
     , hashable
     , http-client
     , http-types
     , iproute
     , lens
-    , mtl
     , mwc-random
     , opentracing
     , QuickCheck
-    , safe-exceptions
-    , stm
     , text
     , thrift
     , unordered-containers

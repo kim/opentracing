@@ -30,9 +30,9 @@ module OpenTracing
     )
 where
 
+import Control.Exception.Safe
 import Control.Lens
 import Control.Monad           (void)
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.List.NonEmpty      (NonEmpty (..))
@@ -121,7 +121,7 @@ traced'
     -> m (Traced a)
 traced' Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
     span <- traceStart opt >>= liftIO . mkActive
-    ret  <- unmasked (f span) `catchAll` \e -> do
+    ret  <- unmasked (f span) `catchAny` \e -> do
                 liftIO $ do
                     now <- getCurrentTime
                     modifyActiveSpan span $

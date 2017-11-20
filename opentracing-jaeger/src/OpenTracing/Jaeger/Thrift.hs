@@ -2,31 +2,36 @@
 
 module OpenTracing.Jaeger.Thrift
     ( toThriftSpan
+    , toThriftTags
+    , toThriftProcess
+    , toThriftBatch
     )
 where
 
 import           Control.Lens
-import           Data.Bool            (bool)
+import           Data.Bool         (bool)
 import           Data.Foldable
-import           Data.Int             (Int64)
-import           Data.Text            (Text)
+import           Data.Int          (Int64)
+import           Data.Text         (Text)
 import           Data.Text.Lens
-import qualified Data.Vector          as Vector
-import           Data.Vector.Lens     (vector)
-import           GHC.Stack            (prettyCallStack)
+import           Data.Vector       (Vector)
+import qualified Data.Vector       as Vector
+import           Data.Vector.Lens  (vector)
+import           GHC.Stack         (prettyCallStack)
 import           Jaeger_Types
-    ( Log (..)
+    ( Batch (..)
+    , Log (..)
+    , Process (..)
     , Span (..)
     , SpanRef (..)
     , Tag (..)
     )
-import qualified Jaeger_Types         as Thrift
+import qualified Jaeger_Types      as Thrift
 import           OpenTracing.Log
 import           OpenTracing.Span
-import           OpenTracing.Standard
-import           OpenTracing.Tags     (TagVal (..), fromTags)
+import           OpenTracing.Tags
 import           OpenTracing.Time
-import           OpenTracing.Types    (TraceID (..))
+import           OpenTracing.Types (TraceID (..))
 
 
 toThriftSpan :: FinishedSpan -> Thrift.Span
@@ -51,10 +56,7 @@ toThriftSpan s = Thrift.Span
                                 s
     , span_startTime     = view (spanStart . to micros) s
     , span_duration      = view (spanDuration . to micros) s
-    , span_tags          = Just
-                         . ifoldMap (\k v -> Vector.singleton (toThriftTag k v))
-                         . fromTags
-                         $ view spanTags s
+    , span_tags          = view (spanTags . to toThriftTags . re _Just) s
     , span_logs          = Just
                          . Vector.fromList
                          . foldr' (\r acc -> toThriftLog r : acc) []
@@ -72,6 +74,9 @@ toThriftSpanRef ref = Thrift.SpanRef
 toThriftRefType :: Reference -> Thrift.SpanRefType
 toThriftRefType (ChildOf     _) = Thrift.CHILD_OF
 toThriftRefType (FollowsFrom _) = Thrift.FOLLOWS_FROM
+
+toThriftTags :: Tags -> Vector Thrift.Tag
+toThriftTags = ifoldMap (\k v -> Vector.singleton (toThriftTag k v)) . fromTags
 
 toThriftTag :: Text -> TagVal -> Thrift.Tag
 toThriftTag k v =
@@ -100,6 +105,18 @@ toThriftLog r = Thrift.Log
         Stack      v -> view packed (prettyCallStack v)
         ErrKind    v -> v
         ErrObj     v -> view packed (show v)
+
+toThriftProcess :: Text -> Tags -> Thrift.Process
+toThriftProcess srv tags = Thrift.Process
+    { process_serviceName = view lazy srv
+    , process_tags        = Just $ toThriftTags tags
+    }
+
+toThriftBatch :: Thrift.Process -> Vector FinishedSpan -> Thrift.Batch
+toThriftBatch proc spans = Thrift.Batch
+    { batch_process = proc
+    , batch_spans   = toThriftSpan <$> spans
+    }
 
 traceIdLo' :: SpanContext -> Int64
 traceIdLo' = fromIntegral . traceIdLo . ctxTraceID
