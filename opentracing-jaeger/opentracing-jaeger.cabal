@@ -17,6 +17,7 @@ library
   exposed-modules:
       OpenTracing.Jaeger.AgentReporter
       OpenTracing.Jaeger.CollectorReporter
+      OpenTracing.Jaeger.Propagation
       OpenTracing.Jaeger.Thrift
 
   other-modules:
@@ -34,6 +35,7 @@ library
     , exceptions
     , hashable
     , http-client
+    , http-types
     , lens
     , mtl
     , network
