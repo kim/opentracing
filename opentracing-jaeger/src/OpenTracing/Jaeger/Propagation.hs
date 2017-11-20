@@ -50,26 +50,24 @@ _UberTraceId :: Prism' Text SpanContext
 _UberTraceId = prism' fromCtx toCtx
   where
     fromCtx c@SpanContext{..} =
-        Text.intercalate ":" [traceid, spanid, parent, flags]
-      where
-        traceid = view hexText ctxTraceID
-        spanid  = view hexText ctxSpanID
-        parent  = maybe mempty (view hexText) ctxParentSpanID
-        flags   = if view (ctxSampled . re _IsSampled) c then "1" else "0"
+        let traceid = view hexText ctxTraceID
+            spanid  = view hexText ctxSpanID
+            parent  = maybe mempty (view hexText) ctxParentSpanID
+            flags   = if view (ctxSampled . re _IsSampled) c then "1" else "0"
+         in Text.intercalate ":" [traceid, spanid, parent, flags]
 
-    toCtx t = case Text.split (==':') t of
-        [traceid, spanid, _, flags] -> SpanContext
-            <$> preview _Hex (knownHex traceid)
-            <*> preview _Hex (knownHex spanid)
-            <*> pure Nothing
-            <*> either (const $ Just NotSampled)
-                       (Just . view _IsSampled . shouldSample . fst)
-                       (Text.decimal flags)
-            <*> pure mempty
+    toCtx t =
+        let sampledFlag = 1 :: Word
+            debugFlag   = 2 :: Word
+            shouldSample fs = fs .&. sampledFlag > 0 || fs .&. debugFlag > 0
+         in case Text.split (==':') t of
+                [traceid, spanid, _, flags] -> SpanContext
+                    <$> preview _Hex (knownHex traceid)
+                    <*> preview _Hex (knownHex spanid)
+                    <*> pure Nothing
+                    <*> either (const $ Just NotSampled)
+                               (Just . view _IsSampled . shouldSample . fst)
+                               (Text.decimal flags)
+                    <*> pure mempty
 
-        _ -> Nothing
-      where
-        sampledFlag = 1 :: Word
-        debugFlag   = 2 :: Word
-
-        shouldSample fs = fs .&. sampledFlag > 0 || fs .&. debugFlag > 0
+                _ -> Nothing
