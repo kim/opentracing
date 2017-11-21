@@ -1,20 +1,24 @@
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ViewPatterns      #-}
 
 module OpenTracing.Jaeger.CollectorReporter
-    ( Env
+    ( Options(..)
+
+    , defaultCollectorAddr
+
+    , Env
     , newEnv
     , closeEnv
     , withEnv
-
-    , CollectorAddr(..)
-    , defaultCollectorAddr
 
     , jaegerCollectorReporter
     )
 where
 
+import           Control.Lens              (view)
 import           Control.Monad             (void)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -22,7 +26,6 @@ import           Data.Monoid
 import           Data.Text                 (Text)
 import           Data.Vector               (fromList)
 import qualified Jaeger_Types              as Thrift
-import           Network                   (HostName)
 import           Network.HTTP.Client
 import           OpenTracing.Jaeger.Thrift
 import           OpenTracing.Reporting
@@ -35,46 +38,36 @@ import           Thrift.Transport.Empty
 
 type Env = BatchEnv
 
-data CollectorAddr = CollectorAddr
-    { collectorHost   :: HostName
-    , collectorPort   :: Port
-    , collectorSecure :: Bool
+data Options = Options
+    { optManager     :: Manager
+    , optServiceName :: Text
+    , optServiceTags :: Tags
+    , optAddr        :: Addr 'HTTP
     }
 
-defaultCollectorAddr :: CollectorAddr
-defaultCollectorAddr = CollectorAddr
-    { collectorHost   = "127.0.0.1"
-    , collectorPort   = 14268
-    , collectorSecure = False
-    }
+defaultCollectorAddr :: Addr 'HTTP
+defaultCollectorAddr = HTTPAddr "127.0.0.1" 14268 False
 
-newEnv :: Manager -> Text -> Tags -> CollectorAddr -> IO Env
-newEnv mgr srv tags CollectorAddr{..} = do
+newEnv :: Options -> IO Env
+newEnv Options{..} = do
     rq <- mkReq
-    newBatchEnv 100 $ reporter rq mgr (toThriftProcess srv tags)
+    newBatchEnv 100 $
+        reporter rq optManager (toThriftProcess optServiceName optServiceTags)
   where
     mkReq = do
         rq <- parseRequest
-                    $ "http://" <> collectorHost <> ":" <> show collectorPort
+                    $ "http://" <> view addrHostName optAddr
+                   <> ":"
+                   <> show (view addrPort optAddr)
                    <> "/api/traces?format=jaeger.thrift"
-        pure rq { method = "POST", secure = collectorSecure }
+        pure rq { method = "POST", secure = view addrSecure optAddr }
 
 
 closeEnv :: Env -> IO ()
 closeEnv = closeBatchEnv
 
-withEnv
-    :: ( MonadIO   m
-       , MonadMask m
-       )
-    => Manager
-    -> Text
-    -> Tags
-    -> CollectorAddr
-    -> (Env -> m a)
-    -> m a
-withEnv mgr srv tags addr =
-    bracket (liftIO $ newEnv mgr srv tags addr) (liftIO . closeEnv)
+withEnv :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withEnv opts = bracket (liftIO $ newEnv opts) (liftIO . closeEnv)
 
 
 jaegerCollectorReporter :: MonadIO m => Env -> FinishedSpan -> m ()

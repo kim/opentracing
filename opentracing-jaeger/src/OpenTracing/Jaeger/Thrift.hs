@@ -113,8 +113,8 @@ toThriftProcess srv tags = Thrift.Process
     }
 
 toThriftBatch :: Thrift.Process -> Vector FinishedSpan -> Thrift.Batch
-toThriftBatch proc spans = Thrift.Batch
-    { batch_process = proc
+toThriftBatch tproc spans = Thrift.Batch
+    { batch_process = tproc
     , batch_spans   = toThriftSpan <$> spans
     }
 

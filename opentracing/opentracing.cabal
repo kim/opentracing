@@ -41,6 +41,7 @@ library
     , lens
     , mtl
     , mwc-random
+    , network
     , safe-exceptions
     , semigroups
     , stm

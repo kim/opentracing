@@ -1,18 +1,20 @@
-{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE StrictData        #-}
 
 module OpenTracing.Zipkin.HttpReporter
-    ( API(..)
+    ( Options(..)
+    , API(..)
+
+    , defaultZipkinAddr
+
     , Env
     , newEnv
     , closeEnv
     , withEnv
-
-    , ZipkinAddr(..)
-    , defaultZipkinAddr
 
     , zipkinHttpReporter
 
@@ -46,76 +48,61 @@ data API = V1 | V2
 
 type Env = BatchEnv
 
-data ZipkinAddr = ZipkinAddr
-    { zipkinHost   :: String
-    , zipkinPort   :: Port
-    , zipkinSecure :: Bool
+data Options = Options
+    { optManager       :: Manager
+    , optApiVersion    :: API
+    , optLocalEndpoint :: Endpoint
+    , optAddr          :: Addr 'HTTP
+    , optLogfmt        :: LogFieldsFormatter
     }
 
-defaultZipkinAddr :: ZipkinAddr
-defaultZipkinAddr = ZipkinAddr
-    { zipkinHost   = "127.0.0.1"
-    , zipkinPort   = 9411
-    , zipkinSecure = False
-    }
+defaultZipkinAddr :: Addr 'HTTP
+defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False
 
-
-newEnv :: Manager -> API -> Endpoint -> ZipkinAddr -> LogFieldsFormatter -> IO Env
-newEnv mgr api loc ZipkinAddr{..} logfmt = do
-    rq  <- mkReq
-    newBatchEnv 100 $ reporter api rq mgr loc logfmt
+newEnv :: Options -> IO Env
+newEnv opts = do
+    rq <- mkReq
+    newBatchEnv 100 $ reporter opts rq
   where
     mkReq = do
-        let rqBase = "POST http://" <> zipkinHost <> ":" <> show zipkinPort
-        case api of
+        let addr   = optAddr opts
+        let rqBase = "POST http://"
+                   <> view addrHostName addr
+                   <> ":"
+                   <> show (view addrPort addr)
+        case optApiVersion opts of
             V1 -> do
                 rq <- parseRequest $ rqBase <> "/api/v1/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/x-thrift")]
-                    , secure         = zipkinSecure
+                    , secure         = view addrSecure addr
                     }
             V2 -> do
                 rq <- parseRequest $ rqBase <> "/api/v2/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/json")]
-                    , secure         = zipkinSecure
+                    , secure         = view addrSecure addr
                     }
 
 closeEnv :: Env -> IO ()
 closeEnv = closeBatchEnv
 
-withEnv
-    :: ( MonadIO   m
-       , MonadMask m
-       )
-    => Manager
-    -> API
-    -> Endpoint
-    -> ZipkinAddr
-    -> LogFieldsFormatter
-    -> (Env -> m a)
-    -> m a
-withEnv mgr api loc addr logfmt =
-    bracket (liftIO $ newEnv mgr api loc addr logfmt) (liftIO . closeEnv)
+withEnv :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withEnv opts = bracket (liftIO $ newEnv opts) (liftIO . closeEnv)
 
 
 zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
 zipkinHttpReporter = batchReporter
 
-reporter
-    :: API
-    -> Request
-    -> Manager
-    -> Endpoint
-    -> LogFieldsFormatter
-    -> [FinishedSpan]
-    -> IO ()
-reporter api rq mgr loc logfmt spans =
-    void $ httpLbs rq { requestBody = body } mgr -- XXX: check response status
+reporter :: Options -> Request -> [FinishedSpan] -> IO ()
+reporter Options{..} rq spans =
+    void $ httpLbs rq { requestBody = body } optManager -- XXX: check response status
   where
-    body = RequestBodyLBS $ case api of
-        V1 -> thriftEncodeSpans $ map (toThriftSpan loc logfmt) spans
-        V2 -> encodingToLazyByteString $ list (spanE loc logfmt) spans
+    body = RequestBodyLBS $ case optApiVersion of
+        V1 -> thriftEncodeSpans $
+                  map (toThriftSpan optLocalEndpoint optLogfmt) spans
+        V2 -> encodingToLazyByteString $
+                  list (spanE optLocalEndpoint optLogfmt) spans
 
 
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding
