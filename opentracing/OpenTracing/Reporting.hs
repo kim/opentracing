@@ -15,6 +15,7 @@ import Control.Exception        (AsyncException (ThreadKilled))
 import Control.Exception.Safe
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Word
 import OpenTracing.Span
 
 
@@ -23,7 +24,7 @@ data BatchEnv = BatchEnv
     , envRep :: Async ()
     }
 
-newBatchEnv :: Int -> ([FinishedSpan] -> IO ()) -> IO BatchEnv
+newBatchEnv :: Word16 -> ([FinishedSpan] -> IO ()) -> IO BatchEnv
 newBatchEnv siz f = do
     q <- newTQueueIO
     BatchEnv q <$> consumer siz q f
@@ -35,7 +36,7 @@ batchReporter :: MonadIO m => BatchEnv -> FinishedSpan -> m ()
 batchReporter BatchEnv{envQ} = liftIO . atomically . writeTQueue envQ
 
 consumer
-    :: Int
+    :: Word16
     -> TQueue FinishedSpan
     -> ([FinishedSpan] -> IO ())
     -> IO (Async ())
@@ -51,7 +52,7 @@ consumer siz q f = async . handle drain . forever $
     drain ThreadKilled = go (return ())
     drain e            = throwM e
 
-pop :: Int -> TQueue a -> STM [a]
+pop :: Word16 -> TQueue a -> STM [a]
 pop 0 _ = pure []
 pop n q = do
     v <- tryReadTQueue q
