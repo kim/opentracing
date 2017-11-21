@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds       #-}
-{-# LANGUAGE GADTs           #-}
 {-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData      #-}
@@ -19,6 +18,7 @@ module OpenTracing.Jaeger.AgentReporter
 where
 
 import qualified Agent_Client                   as Thrift
+import           Control.Lens                   (view)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
@@ -79,10 +79,10 @@ withEnv :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
 withEnv opts = bracket (liftIO $ newEnv opts) (liftIO . closeEnv)
 
 openUDPTrans :: Addr 'UDP -> IO UDPTrans
-openUDPTrans (UDPAddr agentHost agentPort) = do
+openUDPTrans addr = do
     AddrInfo{..} : _ <- getAddrInfo (Just defaultHints { addrSocketType = Datagram })
-                                    (Just agentHost)
-                                    (Just (show agentPort))
+                                    (Just . view addrHostName $ addr)
+                                    (Just . show . view addrPort $ addr)
     sock <- socket addrFamily addrSocketType addrProtocol
     connect sock addrAddress
 
