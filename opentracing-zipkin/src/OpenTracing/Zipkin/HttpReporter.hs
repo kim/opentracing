@@ -1,11 +1,21 @@
 {-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE StrictData        #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module OpenTracing.Zipkin.HttpReporter
-    ( Options(..)
+    ( Options
+    , zipkinHttpOptions
+    , optManager
+    , optApiVersion
+    , optLocalEndpoint
+    , optAddr
+    , optLogfmt
+    , optErrorLog
+
     , API(..)
 
     , defaultZipkinAddr
@@ -22,17 +32,17 @@ module OpenTracing.Zipkin.HttpReporter
 where
 
 import Control.Lens              hiding (Context)
-import Control.Monad             (void)
+import Control.Monad             (unless)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.Aeson                hiding (Error)
 import Data.Aeson.Encoding
-import Data.ByteString.Builder   (toLazyByteString)
+import Data.ByteString.Builder
 import Data.Maybe                (catMaybes)
 import Data.Monoid
 import Data.Text.Lazy.Encoding   (decodeUtf8)
 import Network.HTTP.Client       hiding (port)
-import Network.HTTP.Types        (hContentType)
+import Network.HTTP.Types
 import OpenTracing.Log
 import OpenTracing.Reporting
 import OpenTracing.Span
@@ -48,39 +58,51 @@ data API = V1 | V2
 type Env = BatchEnv
 
 data Options = Options
-    { optManager       :: Manager
-    , optApiVersion    :: API
-    , optLocalEndpoint :: Endpoint
-    , optAddr          :: Addr 'HTTP
-    , optLogfmt        :: LogFieldsFormatter
+    { _optManager       :: Manager
+    , _optApiVersion    :: API
+    , _optLocalEndpoint :: Endpoint
+    , _optAddr          :: Addr 'HTTP
+    , _optLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
+    , _optErrorLog      :: Builder -> IO ()
+    }
+
+makeLenses ''Options
+
+zipkinHttpOptions :: Manager -> API -> Endpoint -> Options
+zipkinHttpOptions mgr api loc = Options
+    { _optManager       = mgr
+    , _optApiVersion    = api
+    , _optLocalEndpoint = loc
+    , _optAddr          = defaultZipkinAddr
+    , _optLogfmt        = jsonMap
+    , _optErrorLog      = defaultErrorLog
     }
 
 defaultZipkinAddr :: Addr 'HTTP
 defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False
 
 newEnv :: Options -> IO Env
-newEnv opts = do
+newEnv opts@Options{_optErrorLog=errlog,_optApiVersion} = do
     rq <- mkReq
-    newBatchEnv 100 $ reporter opts rq
+    newBatchEnv . set boptErrorLog errlog . batchOptions $ reporter opts rq
   where
     mkReq = do
-        let addr   = optAddr opts
         let rqBase = "POST http://"
-                   <> view addrHostName addr
+                   <> view (optAddr . addrHostName) opts
                    <> ":"
-                   <> show (view addrPort addr)
-        case optApiVersion opts of
+                   <> show (view (optAddr . addrPort) opts)
+        case _optApiVersion of
             V1 -> do
                 rq <- parseRequest $ rqBase <> "/api/v1/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/x-thrift")]
-                    , secure         = view addrSecure addr
+                    , secure         = view (optAddr . addrSecure) opts
                     }
             V2 -> do
                 rq <- parseRequest $ rqBase <> "/api/v2/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/json")]
-                    , secure         = view addrSecure addr
+                    , secure         = view (optAddr . addrSecure) opts
                     }
 
 closeEnv :: Env -> IO ()
@@ -94,14 +116,18 @@ zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
 zipkinHttpReporter = batchReporter
 
 reporter :: Options -> Request -> [FinishedSpan] -> IO ()
-reporter Options{..} rq spans =
-    void $ httpLbs rq { requestBody = body } optManager -- XXX: check response status
+reporter Options{..} rq spans = do
+    rs <- responseStatus <$> httpLbs rq { requestBody = body } _optManager
+    unless (statusIsSuccessful rs) $
+        _optErrorLog $ shortByteString "Error from Zipkin server: "
+                    <> intDec (statusCode rs)
+                    <> char8 '\n'
   where
-    body = RequestBodyLBS $ case optApiVersion of
+    body = RequestBodyLBS $ case _optApiVersion of
         V1 -> thriftEncodeSpans $
-                  map (toThriftSpan optLocalEndpoint optLogfmt) spans
+                  map (toThriftSpan _optLocalEndpoint _optLogfmt) spans
         V2 -> encodingToLazyByteString $
-                  list (spanE optLocalEndpoint optLogfmt) spans
+                  list (spanE _optLocalEndpoint _optLogfmt) spans
 
 
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding

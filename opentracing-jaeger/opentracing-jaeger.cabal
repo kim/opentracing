@@ -41,6 +41,7 @@ library
     , network
     , opentracing
     , QuickCheck
+    , safe-exceptions
     , text
     , thrift
     , unordered-containers
