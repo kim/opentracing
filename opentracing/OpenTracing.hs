@@ -7,7 +7,8 @@
 {-# LANGUAGE TypeApplications      #-}
 
 module OpenTracing
-    ( module OpenTracing.Propagation
+    ( module OpenTracing.Log
+    , module OpenTracing.Propagation
     , module OpenTracing.Sampling
     , module OpenTracing.Span
     , module OpenTracing.Tags
