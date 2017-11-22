@@ -132,9 +132,9 @@ toThriftTag (BinaryT v) = (Thrift.BYTES, TString v)
 
 toThriftEndpoint :: Endpoint -> Thrift.Endpoint
 toThriftEndpoint Endpoint{..} = Thrift.Endpoint
-    { endpoint_ipv4         = packIPv4 $ maybe "127.0.0.1" fromIPv4 ipv4
+    { endpoint_ipv4         = packIPv4 $ fromIPv4 ipv4
     , endpoint_port         = maybe 0 (fromIntegral . fromPort) port
-    , endpoint_service_name = maybe "unknown" (view lazy) serviceName
+    , endpoint_service_name = view lazy serviceName
     , endpoint_ipv6         = packIPv6 . fromIPv6 <$> ipv6
     }
   where
