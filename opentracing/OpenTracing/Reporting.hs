@@ -78,11 +78,11 @@ batchReporter :: MonadIO m => BatchEnv -> FinishedSpan -> m ()
 batchReporter BatchEnv{envQ} = liftIO . atomically . writeTQueue envQ
 
 consumer :: BatchOptions -> TQueue FinishedSpan -> IO (Async ())
-consumer opt@BatchOptions{..} q = async . forever $ do
-    w <- async $ go False
-    handleAsync drain $ do
-        wait w
-        void . atomically $ peekTQueue q
+consumer opt@BatchOptions{..} q =
+    async . forever . withAsync (go False) $ \w ->
+        handleAsync drain $ do
+            wait w
+            void . atomically $ peekTQueue q
   where
     go draining = do
         batch <- atomically $ pop _boptBatchSize q
