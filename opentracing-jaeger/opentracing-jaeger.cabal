@@ -15,6 +15,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
+      OpenTracing.Jaeger
       OpenTracing.Jaeger.AgentReporter
       OpenTracing.Jaeger.CollectorReporter
       OpenTracing.Jaeger.Propagation

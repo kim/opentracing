@@ -7,18 +7,18 @@
 {-# LANGUAGE TemplateHaskell            #-}
 
 module OpenTracing.Jaeger.AgentReporter
-    ( Options
+    ( JaegerAgentOptions
     , jaegerAgentOptions
-    , optServiceName
-    , optServiceTags
-    , optAddr
-    , optErrorLog
+    , jaoServiceName
+    , jaoServiceTags
+    , jaoAddr
+    , jaoErrorLog
 
     , defaultJaegerAgentAddr
 
-    , Env
-    , newJaegerAgentEnv
-    , closeJaegerAgentEnv
+    , JaegerAgent
+    , newJaegerAgent
+    , closeJaegerAgent
     , withJaegerAgent
 
     , jaegerAgentReporter
@@ -57,7 +57,7 @@ import qualified Thrift.Protocol.Compact        as Thrift
 import           Thrift.Transport.Handle        ()
 
 
-data Env = Env
+data JaegerAgent = JaegerAgent
     { envLocalProcess :: Thrift.Process
     , envErrorLog     :: Builder -> IO ()
     , envTransport    :: AgentTransport
@@ -66,37 +66,44 @@ data Env = Env
 newtype AgentTransport = AgentTransport Handle
     deriving Thrift.Transport
 
-data Options = Options
-    { _optServiceName :: Text
-    , _optServiceTags :: Tags
-    , _optAddr        :: Addr 'UDP
-    , _optErrorLog    :: Builder -> IO ()
+data JaegerAgentOptions = JaegerAgentOptions
+    { _jaoServiceName :: Text
+    , _jaoServiceTags :: Tags
+    , _jaoAddr        :: Addr 'UDP
+    , _jaoErrorLog    :: Builder -> IO ()
     }
 
-jaegerAgentOptions :: Text -> Options
-jaegerAgentOptions srv = Options
-    { _optServiceName = srv
-    , _optServiceTags = mempty
-    , _optAddr        = defaultJaegerAgentAddr
-    , _optErrorLog    = defaultErrorLog
+jaegerAgentOptions :: Text -> JaegerAgentOptions
+jaegerAgentOptions srv = JaegerAgentOptions
+    { _jaoServiceName = srv
+    , _jaoServiceTags = mempty
+    , _jaoAddr        = defaultJaegerAgentAddr
+    , _jaoErrorLog    = defaultErrorLog
     }
 
 defaultJaegerAgentAddr :: Addr 'UDP
 defaultJaegerAgentAddr = UDPAddr "127.0.0.1" 6831
 
 
-newJaegerAgentEnv :: Options -> IO Env
-newJaegerAgentEnv Options{..} =
-    let tproc = toThriftProcess _optServiceName _optServiceTags
-     in Env tproc _optErrorLog <$> openAgentTransport _optAddr
+newJaegerAgent :: JaegerAgentOptions -> IO JaegerAgent
+newJaegerAgent JaegerAgentOptions{..} =
+    let tproc = toThriftProcess _jaoServiceName _jaoServiceTags
+     in JaegerAgent tproc _jaoErrorLog <$> openAgentTransport _jaoAddr
 
-closeJaegerAgentEnv :: Env -> IO ()
-closeJaegerAgentEnv Env{envTransport} = handleAny (const (return ())) $
-    Thrift.tFlush envTransport *> Thrift.tClose envTransport
+closeJaegerAgent :: JaegerAgent -> IO ()
+closeJaegerAgent JaegerAgent{envTransport} =
+    handleAny (const (return ())) $
+        Thrift.tFlush envTransport *> Thrift.tClose envTransport
 
-withJaegerAgent :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withJaegerAgent
+    :: ( MonadIO   m
+       , MonadMask m
+       )
+    => JaegerAgentOptions
+    -> (JaegerAgent -> m a)
+    -> m a
 withJaegerAgent opts =
-    bracket (liftIO $ newJaegerAgentEnv opts) (liftIO . closeJaegerAgentEnv)
+    bracket (liftIO $ newJaegerAgent opts) (liftIO . closeJaegerAgent)
 
 openAgentTransport :: Addr 'UDP -> IO AgentTransport
 openAgentTransport addr = do
@@ -111,8 +118,8 @@ openAgentTransport addr = do
 
     return $ AgentTransport hdl
 
-jaegerAgentReporter :: MonadIO m => Env -> FinishedSpan -> m ()
-jaegerAgentReporter Env{..} s = liftIO $ emit `catchAny` err
+jaegerAgentReporter :: MonadIO m => JaegerAgent -> FinishedSpan -> m ()
+jaegerAgentReporter JaegerAgent{..} s = liftIO $ emit `catchAny` err
   where
     proto = Thrift.CompactProtocol envTransport
     emit  = Thrift.emitBatch (undefined, proto)
@@ -121,4 +128,4 @@ jaegerAgentReporter Env{..} s = liftIO $ emit `catchAny` err
                        <> string8 (show e)
                        <> char8 '\n'
 
-makeLenses ''Options
+makeLenses ''JaegerAgentOptions

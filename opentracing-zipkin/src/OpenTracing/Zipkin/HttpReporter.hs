@@ -7,22 +7,22 @@
 {-# LANGUAGE TemplateHaskell   #-}
 
 module OpenTracing.Zipkin.HttpReporter
-    ( Options
-    , zipkinHttpOptions
-    , optManager
-    , optApiVersion
-    , optLocalEndpoint
-    , optAddr
-    , optLogfmt
-    , optErrorLog
+    ( ZipkinOptions
+    , zipkinOptions
+    , zoManager
+    , zoApiVersion
+    , zoLocalEndpoint
+    , zoAddr
+    , zoLogfmt
+    , zoErrorLog
 
     , API(..)
 
     , defaultZipkinAddr
 
-    , Env
-    , newZipkinEnv
-    , closeZipkinEnv
+    , Zipkin
+    , newZipkin
+    , closeZipkin
     , withZipkin
 
     , zipkinHttpReporter
@@ -55,79 +55,88 @@ import OpenTracing.Zipkin.Types
 
 data API = V1 | V2
 
-type Env = BatchEnv
+newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 
-data Options = Options
-    { _optManager       :: Manager
-    , _optApiVersion    :: API
-    , _optLocalEndpoint :: Endpoint
-    , _optAddr          :: Addr 'HTTP
-    , _optLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
-    , _optErrorLog      :: Builder -> IO ()
+data ZipkinOptions = ZipkinOptions
+    { _zoManager       :: Manager
+    , _zoApiVersion    :: API
+    , _zoLocalEndpoint :: Endpoint
+    , _zoAddr          :: Addr 'HTTP
+    , _zoLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
+    , _zoErrorLog      :: Builder -> IO ()
     }
 
-makeLenses ''Options
+makeLenses ''ZipkinOptions
 
-zipkinHttpOptions :: Manager -> API -> Endpoint -> Options
-zipkinHttpOptions mgr api loc = Options
-    { _optManager       = mgr
-    , _optApiVersion    = api
-    , _optLocalEndpoint = loc
-    , _optAddr          = defaultZipkinAddr
-    , _optLogfmt        = jsonMap
-    , _optErrorLog      = defaultErrorLog
+zipkinOptions :: Manager -> API -> Endpoint -> ZipkinOptions
+zipkinOptions mgr api loc = ZipkinOptions
+    { _zoManager       = mgr
+    , _zoApiVersion    = api
+    , _zoLocalEndpoint = loc
+    , _zoAddr          = defaultZipkinAddr
+    , _zoLogfmt        = jsonMap
+    , _zoErrorLog      = defaultErrorLog
     }
 
 defaultZipkinAddr :: Addr 'HTTP
 defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False
 
-newZipkinEnv :: Options -> IO Env
-newZipkinEnv opts@Options{_optErrorLog=errlog,_optApiVersion} = do
+newZipkin :: ZipkinOptions -> IO Zipkin
+newZipkin opts@ZipkinOptions{_zoErrorLog=errlog,_zoApiVersion} = do
     rq <- mkReq
-    newBatchEnv . set boptErrorLog errlog . batchOptions $ reporter opts rq
+    fmap Zipkin
+        . newBatchEnv
+        . set boptErrorLog errlog . batchOptions
+        $ reporter opts rq
   where
     mkReq = do
         let rqBase = "POST http://"
-                   <> view (optAddr . addrHostName) opts
+                   <> view (zoAddr . addrHostName) opts
                    <> ":"
-                   <> show (view (optAddr . addrPort) opts)
-        case _optApiVersion of
+                   <> show (view (zoAddr . addrPort) opts)
+        case _zoApiVersion of
             V1 -> do
                 rq <- parseRequest $ rqBase <> "/api/v1/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/x-thrift")]
-                    , secure         = view (optAddr . addrSecure) opts
+                    , secure         = view (zoAddr . addrSecure) opts
                     }
             V2 -> do
                 rq <- parseRequest $ rqBase <> "/api/v2/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/json")]
-                    , secure         = view (optAddr . addrSecure) opts
+                    , secure         = view (zoAddr . addrSecure) opts
                     }
 
-closeZipkinEnv :: Env -> IO ()
-closeZipkinEnv = closeBatchEnv
+closeZipkin :: Zipkin -> IO ()
+closeZipkin = closeBatchEnv . fromZipkin
 
-withZipkin :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
-withZipkin opts = bracket (liftIO $ newZipkinEnv opts) (liftIO . closeZipkinEnv)
+withZipkin
+    :: ( MonadIO   m
+       , MonadMask m
+       )
+    => ZipkinOptions
+    -> (Zipkin -> m a)
+    -> m a
+withZipkin opts = bracket (liftIO $ newZipkin opts) (liftIO . closeZipkin)
 
 
-zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
-zipkinHttpReporter = batchReporter
+zipkinHttpReporter :: MonadIO m => Zipkin -> FinishedSpan -> m ()
+zipkinHttpReporter = batchReporter . fromZipkin
 
-reporter :: Options -> Request -> [FinishedSpan] -> IO ()
-reporter Options{..} rq spans = do
-    rs <- responseStatus <$> httpLbs rq { requestBody = body } _optManager
+reporter :: ZipkinOptions -> Request -> [FinishedSpan] -> IO ()
+reporter ZipkinOptions{..} rq spans = do
+    rs <- responseStatus <$> httpLbs rq { requestBody = body } _zoManager
     unless (statusIsSuccessful rs) $
-        _optErrorLog $ shortByteString "Error from Zipkin server: "
+        _zoErrorLog $ shortByteString "Error from Zipkin server: "
                     <> intDec (statusCode rs)
                     <> char8 '\n'
   where
-    body = RequestBodyLBS $ case _optApiVersion of
+    body = RequestBodyLBS $ case _zoApiVersion of
         V1 -> thriftEncodeSpans $
-                  map (toThriftSpan _optLocalEndpoint _optLogfmt) spans
+                  map (toThriftSpan _zoLocalEndpoint _zoLogfmt) spans
         V2 -> encodingToLazyByteString $
-                  list (spanE _optLocalEndpoint _optLogfmt) spans
+                  list (spanE _zoLocalEndpoint _zoLogfmt) spans
 
 
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding

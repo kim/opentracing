@@ -1,7 +1,11 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.Wai.Middleware.OpenTracing (opentracing) where
+module Network.Wai.Middleware.OpenTracing
+    ( TracedApplication
+    , opentracing
+    )
+where
 
 import           Control.Lens       (over, set, view)
 import           Data.Maybe

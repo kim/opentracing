@@ -6,10 +6,9 @@ import Control.Concurrent                   (threadDelay)
 import Control.Monad.IO.Class               (liftIO)
 import Network.HTTP.Client                  (defaultManagerSettings, newManager)
 import OpenTracing
-import OpenTracing.Jaeger.AgentReporter
-import OpenTracing.Jaeger.CollectorReporter
+import OpenTracing.Jaeger
 import OpenTracing.Standard
-import OpenTracing.Zipkin.HttpReporter
+import OpenTracing.Zipkin
 import System.Environment                   (getArgs)
 
 
@@ -55,7 +54,7 @@ setup be f = do
   where
     zipkin api std = do
         mgr <- newManager defaultManagerSettings
-        let opts = zipkinHttpOptions mgr api Endpoint
+        let opts = zipkinOptions mgr api Endpoint
                  { serviceName = "zipkin-example"
                  , ipv4        = read "127.0.0.1"
                  , ipv6        = Nothing

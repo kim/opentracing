@@ -5,19 +5,19 @@
 {-# LANGUAGE ViewPatterns      #-}
 
 module OpenTracing.Jaeger.CollectorReporter
-    ( Options
+    ( JaegerCollectorOptions
     , jaegerCollectorOptions
-    , optManager
-    , optServiceName
-    , optServiceTags
-    , optAddr
-    , optErrorLog
+    , jcoManager
+    , jcoServiceName
+    , jcoServiceTags
+    , jcoAddr
+    , jcoErrorLog
 
     , defaultJaegerCollectorAddr
 
-    , Env
-    , newJaegerCollectorEnv
-    , closeJaegerCollectorEnv
+    , JaegerCollector
+    , newJaegerCollector
+    , closeJaegerCollector
     , withJaegerCollector
 
     , jaegerCollectorReporter
@@ -47,58 +47,65 @@ import           Thrift.Protocol.Binary
 import           Thrift.Transport.Empty
 
 
-type Env = BatchEnv
+newtype JaegerCollector = JaegerCollector { fromJaegerCollector :: BatchEnv }
 
-data Options = Options
-    { _optManager     :: Manager
-    , _optServiceName :: Text
-    , _optServiceTags :: Tags
-    , _optAddr        :: Addr 'HTTP
-    , _optErrorLog    :: Builder -> IO ()
+data JaegerCollectorOptions = JaegerCollectorOptions
+    { _jcoManager     :: Manager
+    , _jcoServiceName :: Text
+    , _jcoServiceTags :: Tags
+    , _jcoAddr        :: Addr 'HTTP
+    , _jcoErrorLog    :: Builder -> IO ()
     }
 
-makeLenses ''Options
+makeLenses ''JaegerCollectorOptions
 
-jaegerCollectorOptions :: Manager -> Text -> Options
-jaegerCollectorOptions mgr srv = Options
-    { _optManager     = mgr
-    , _optServiceName = srv
-    , _optServiceTags = mempty
-    , _optAddr        = defaultJaegerCollectorAddr
-    , _optErrorLog    = defaultErrorLog
+jaegerCollectorOptions :: Manager -> Text -> JaegerCollectorOptions
+jaegerCollectorOptions mgr srv = JaegerCollectorOptions
+    { _jcoManager     = mgr
+    , _jcoServiceName = srv
+    , _jcoServiceTags = mempty
+    , _jcoAddr        = defaultJaegerCollectorAddr
+    , _jcoErrorLog    = defaultErrorLog
     }
 
 defaultJaegerCollectorAddr :: Addr 'HTTP
 defaultJaegerCollectorAddr = HTTPAddr "127.0.0.1" 14268 False
 
-newJaegerCollectorEnv :: Options -> IO Env
-newJaegerCollectorEnv opt@Options{..} = do
+newJaegerCollector :: JaegerCollectorOptions -> IO JaegerCollector
+newJaegerCollector opt@JaegerCollectorOptions{..} = do
     rq <- mkReq
-    newBatchEnv . set boptErrorLog _optErrorLog . batchOptions $
-        reporter _optManager _optErrorLog rq tproc
+    fmap JaegerCollector
+        . newBatchEnv
+        . set boptErrorLog _jcoErrorLog . batchOptions
+        $ reporter _jcoManager _jcoErrorLog rq tproc
   where
     mkReq = do
         rq <- parseRequest
-                    $ "http://" <> view (optAddr . addrHostName) opt
+                    $ "http://" <> view (jcoAddr . addrHostName) opt
                    <> ":"
-                   <> show (view (optAddr . addrPort) opt)
+                   <> show (view (jcoAddr . addrPort) opt)
                    <> "/api/traces?format=jaeger.thrift"
-        pure rq { method = "POST", secure = view (optAddr . addrSecure) opt }
+        pure rq { method = "POST", secure = view (jcoAddr . addrSecure) opt }
 
-    tproc = toThriftProcess _optServiceName _optServiceTags
+    tproc = toThriftProcess _jcoServiceName _jcoServiceTags
 
 
-closeJaegerCollectorEnv :: Env -> IO ()
-closeJaegerCollectorEnv = closeBatchEnv
+closeJaegerCollector :: JaegerCollector -> IO ()
+closeJaegerCollector = closeBatchEnv . fromJaegerCollector
 
-withJaegerCollector :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withJaegerCollector
+    :: ( MonadIO   m
+       , MonadMask m
+       )
+    => JaegerCollectorOptions
+    -> (JaegerCollector -> m a)
+    -> m a
 withJaegerCollector opts =
-    bracket (liftIO $ newJaegerCollectorEnv opts)
-            (liftIO . closeJaegerCollectorEnv)
+    bracket (liftIO $ newJaegerCollector opts) (liftIO . closeJaegerCollector)
 
 
-jaegerCollectorReporter :: MonadIO m => Env -> FinishedSpan -> m ()
-jaegerCollectorReporter = batchReporter
+jaegerCollectorReporter :: MonadIO m => JaegerCollector -> FinishedSpan -> m ()
+jaegerCollectorReporter = batchReporter . fromJaegerCollector
 
 
 reporter
