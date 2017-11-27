@@ -13,28 +13,31 @@ module OpenTracing.Jaeger.CollectorReporter
     , optAddr
     , optErrorLog
 
-    , defaultCollectorAddr
+    , defaultJaegerCollectorAddr
 
     , Env
-    , newEnv
-    , closeEnv
-    , withEnv
+    , newJaegerCollectorEnv
+    , closeJaegerCollectorEnv
+    , withJaegerCollector
 
     , jaegerCollectorReporter
+
+    , jaegerPropagation
     )
 where
 
-import           Control.Lens              (makeLenses, set, view)
-import           Control.Monad             (unless)
+import           Control.Lens                   (makeLenses, set, view)
+import           Control.Monad                  (unless)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Data.ByteString.Builder
 import           Data.Monoid
-import           Data.Text                 (Text)
-import           Data.Vector               (fromList)
-import qualified Jaeger_Types              as Thrift
+import           Data.Text                      (Text)
+import           Data.Vector                    (fromList)
+import qualified Jaeger_Types                   as Thrift
 import           Network.HTTP.Client
 import           Network.HTTP.Types.Status
+import           OpenTracing.Jaeger.Propagation (jaegerPropagation)
 import           OpenTracing.Jaeger.Thrift
 import           OpenTracing.Reporting
 import           OpenTracing.Span
@@ -61,15 +64,15 @@ jaegerCollectorOptions mgr srv = Options
     { _optManager     = mgr
     , _optServiceName = srv
     , _optServiceTags = mempty
-    , _optAddr        = defaultCollectorAddr
+    , _optAddr        = defaultJaegerCollectorAddr
     , _optErrorLog    = defaultErrorLog
     }
 
-defaultCollectorAddr :: Addr 'HTTP
-defaultCollectorAddr = HTTPAddr "127.0.0.1" 14268 False
+defaultJaegerCollectorAddr :: Addr 'HTTP
+defaultJaegerCollectorAddr = HTTPAddr "127.0.0.1" 14268 False
 
-newEnv :: Options -> IO Env
-newEnv opt@Options{..} = do
+newJaegerCollectorEnv :: Options -> IO Env
+newJaegerCollectorEnv opt@Options{..} = do
     rq <- mkReq
     newBatchEnv . set boptErrorLog _optErrorLog . batchOptions $
         reporter _optManager _optErrorLog rq tproc
@@ -85,11 +88,13 @@ newEnv opt@Options{..} = do
     tproc = toThriftProcess _optServiceName _optServiceTags
 
 
-closeEnv :: Env -> IO ()
-closeEnv = closeBatchEnv
+closeJaegerCollectorEnv :: Env -> IO ()
+closeJaegerCollectorEnv = closeBatchEnv
 
-withEnv :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
-withEnv opts = bracket (liftIO $ newEnv opts) (liftIO . closeEnv)
+withJaegerCollector :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withJaegerCollector opts =
+    bracket (liftIO $ newJaegerCollectorEnv opts)
+            (liftIO . closeJaegerCollectorEnv)
 
 
 jaegerCollectorReporter :: MonadIO m => Env -> FinishedSpan -> m ()

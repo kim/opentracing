@@ -21,9 +21,9 @@ module OpenTracing.Zipkin.HttpReporter
     , defaultZipkinAddr
 
     , Env
-    , newEnv
-    , closeEnv
-    , withEnv
+    , newZipkinEnv
+    , closeZipkinEnv
+    , withZipkin
 
     , zipkinHttpReporter
 
@@ -81,8 +81,8 @@ zipkinHttpOptions mgr api loc = Options
 defaultZipkinAddr :: Addr 'HTTP
 defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False
 
-newEnv :: Options -> IO Env
-newEnv opts@Options{_optErrorLog=errlog,_optApiVersion} = do
+newZipkinEnv :: Options -> IO Env
+newZipkinEnv opts@Options{_optErrorLog=errlog,_optApiVersion} = do
     rq <- mkReq
     newBatchEnv . set boptErrorLog errlog . batchOptions $ reporter opts rq
   where
@@ -105,11 +105,11 @@ newEnv opts@Options{_optErrorLog=errlog,_optApiVersion} = do
                     , secure         = view (optAddr . addrSecure) opts
                     }
 
-closeEnv :: Env -> IO ()
-closeEnv = closeBatchEnv
+closeZipkinEnv :: Env -> IO ()
+closeZipkinEnv = closeBatchEnv
 
-withEnv :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
-withEnv opts = bracket (liftIO $ newEnv opts) (liftIO . closeEnv)
+withZipkin :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withZipkin opts = bracket (liftIO $ newZipkinEnv opts) (liftIO . closeZipkinEnv)
 
 
 zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()

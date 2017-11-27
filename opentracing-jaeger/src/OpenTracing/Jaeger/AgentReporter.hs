@@ -14,34 +14,37 @@ module OpenTracing.Jaeger.AgentReporter
     , optAddr
     , optErrorLog
 
-    , defaultAgentAddr
+    , defaultJaegerAgentAddr
 
     , Env
-    , newEnv
-    , closeEnv
-    , withEnv
+    , newJaegerAgentEnv
+    , closeJaegerAgentEnv
+    , withJaegerAgent
 
     , jaegerAgentReporter
+
+    , jaegerPropagation
     )
 where
 
-import qualified Agent_Client              as Thrift
+import qualified Agent_Client                   as Thrift
 import           Control.Exception.Safe
-import           Control.Lens              (makeLenses, view)
+import           Control.Lens                   (makeLenses, view)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.ByteString.Builder
 import           Data.Semigroup
-import           Data.Text                 (Text)
-import qualified Data.Vector               as Vector
-import qualified Jaeger_Types              as Thrift
+import           Data.Text                      (Text)
+import qualified Data.Vector                    as Vector
+import qualified Jaeger_Types                   as Thrift
 import           Network.Socket
+import           OpenTracing.Jaeger.Propagation (jaegerPropagation)
 import           OpenTracing.Jaeger.Thrift
-import           OpenTracing.Reporting     (defaultErrorLog)
+import           OpenTracing.Reporting          (defaultErrorLog)
 import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
-import           Prelude                   hiding (span)
+import           Prelude                        hiding (span)
 import           System.IO
     ( BufferMode (..)
     , Handle
@@ -50,8 +53,8 @@ import           System.IO
     , hSetBuffering
     )
 import qualified Thrift
-import qualified Thrift.Protocol.Compact   as Thrift
-import           Thrift.Transport.Handle   ()
+import qualified Thrift.Protocol.Compact        as Thrift
+import           Thrift.Transport.Handle        ()
 
 
 data Env = Env
@@ -74,25 +77,26 @@ jaegerAgentOptions :: Text -> Options
 jaegerAgentOptions srv = Options
     { _optServiceName = srv
     , _optServiceTags = mempty
-    , _optAddr        = defaultAgentAddr
+    , _optAddr        = defaultJaegerAgentAddr
     , _optErrorLog    = defaultErrorLog
     }
 
-defaultAgentAddr :: Addr 'UDP
-defaultAgentAddr = UDPAddr "127.0.0.1" 6831
+defaultJaegerAgentAddr :: Addr 'UDP
+defaultJaegerAgentAddr = UDPAddr "127.0.0.1" 6831
 
 
-newEnv :: Options -> IO Env
-newEnv Options{..} =
+newJaegerAgentEnv :: Options -> IO Env
+newJaegerAgentEnv Options{..} =
     let tproc = toThriftProcess _optServiceName _optServiceTags
      in Env tproc _optErrorLog <$> openAgentTransport _optAddr
 
-closeEnv :: Env -> IO ()
-closeEnv Env{envTransport} = handleAny (const (return ())) $
+closeJaegerAgentEnv :: Env -> IO ()
+closeJaegerAgentEnv Env{envTransport} = handleAny (const (return ())) $
     Thrift.tFlush envTransport *> Thrift.tClose envTransport
 
-withEnv :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
-withEnv opts = bracket (liftIO $ newEnv opts) (liftIO . closeEnv)
+withJaegerAgent :: (MonadIO m, MonadMask m) => Options -> (Env -> m a) -> m a
+withJaegerAgent opts =
+    bracket (liftIO $ newJaegerAgentEnv opts) (liftIO . closeJaegerAgentEnv)
 
 openAgentTransport :: Addr 'UDP -> IO AgentTransport
 openAgentTransport addr = do

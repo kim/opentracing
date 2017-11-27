@@ -8,7 +8,7 @@
 
 module OpenTracing.Standard
     ( Env
-    , newEnv
+    , newStdEnv
     , envTraceID128bit
     , envSampler
 
@@ -40,8 +40,8 @@ data Env = Env
     , _envTraceID128bit :: Bool
     }
 
-newEnv :: MonadIO m => Sampler -> m Env
-newEnv samp = do
+newStdEnv :: MonadIO m => Sampler -> m Env
+newStdEnv samp = do
     prng <- liftIO createSystemRandom
     return Env { envPRNG = prng, _envSampler = samp, _envTraceID128bit = True }
 
