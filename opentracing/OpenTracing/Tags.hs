@@ -14,6 +14,7 @@ module OpenTracing.Tags
     , TagVal(..)
     , setTag
     , getTag
+    , getTagReify
 
     , pattern ComponentKey
     , pattern DbInstanceKey
@@ -53,6 +54,25 @@ module OpenTracing.Tags
     , pattern SamplingPriority
     , pattern SpanKind
 
+    , _Component
+    , _DbInstance
+    , _DbStatement
+    , _DbType
+    , _DbUser
+    , _Error
+    , _HttpMethod
+    , _HttpStatusCode
+    , _HttpUrl
+    , _MessageBusDestination
+    , _PeerAddress
+    , _PeerHostname
+    , _PeerIPv4
+    , _PeerIPv6
+    , _PeerPort
+    , _PeerService
+    , _SamplingPriority
+    , _SpanKind
+
     , SpanKinds(..)
     , spanKindLabel
     )
@@ -66,6 +86,7 @@ import qualified Data.ByteString.Lazy        as Lazy
 import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HashMap
 import           Data.Int                    (Int64)
+import           Data.Monoid                 (First)
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
@@ -107,6 +128,10 @@ setTag (k,v) = Tags . HashMap.insert k v . fromTags
 
 getTag :: Text -> Tags -> Maybe TagVal
 getTag k = HashMap.lookup k . fromTags
+
+getTagReify :: Getting (First b) Tag b -> Text -> Tags -> Maybe b
+getTagReify p k ts = getTag k ts >>= preview p . (k,)
+
 
 pattern ComponentKey             = "component"
 pattern DbInstanceKey            = "db.instance"
