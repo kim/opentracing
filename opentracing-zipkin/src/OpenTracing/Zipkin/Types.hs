@@ -17,16 +17,16 @@ import OpenTracing.Types
 
 
 data Endpoint = Endpoint
-    { serviceName :: Maybe Text
-    , ipv4        :: Maybe IPv4
+    { serviceName :: Text
+    , ipv4        :: IPv4
     , ipv6        :: Maybe IPv6
     , port        :: Maybe Port
     } deriving (Eq, Show, Generic)
 
 instance ToJSON Endpoint where
     toEncoding Endpoint{..} = pairs . mconcat . catMaybes $
-        [ pair "serviceName" . text <$> serviceName
-        , pair "ipv4" . toEncoding  <$> ipv4
+        [ pair "serviceName" . text <$> Just serviceName
+        , pair "ipv4" . toEncoding  <$> Just ipv4
         , pair "ipv6" . toEncoding  <$> ipv6
         , pair "port" . toEncoding  <$> port
         ]

@@ -15,7 +15,11 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-      OpenTracing.Jaeger.ThriftReporter
+      OpenTracing.Jaeger
+      OpenTracing.Jaeger.AgentReporter
+      OpenTracing.Jaeger.CollectorReporter
+      OpenTracing.Jaeger.Propagation
+      OpenTracing.Jaeger.Thrift
 
   other-modules:
       Jaeger_Consts
@@ -29,12 +33,16 @@ library
   build-depends:
       base
     , bytestring
+    , exceptions
     , hashable
+    , http-client
+    , http-types
     , lens
     , mtl
     , network
     , opentracing
     , QuickCheck
+    , safe-exceptions
     , text
     , thrift
     , unordered-containers

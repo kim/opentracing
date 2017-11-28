@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE StrictData                 #-}
@@ -7,6 +9,12 @@ module OpenTracing.Types
     , IPv4(..)
     , IPv6(..)
     , Port(..)
+
+    , Protocol(..)
+    , Addr(..)
+    , addrHostName
+    , addrPort
+    , addrSecure
 
     , Hex
     , knownHex
@@ -27,6 +35,7 @@ import qualified Data.Text.Lazy.Builder     as TB
 import qualified Data.Text.Lazy.Builder.Int as TB
 import qualified Data.Text.Read             as TR
 import           Data.Word
+import           Network                    (HostName)
 
 
 data TraceID = TraceID
@@ -65,6 +74,24 @@ instance Read Port where readsPrec p = map (over _1 Port) . readsPrec p
 instance ToJSON Port where
     toJSON     = toJSON . fromPort
     toEncoding = word16 . fromPort
+
+
+data Protocol = UDP | HTTP
+
+data Addr a where
+    UDPAddr  :: HostName -> Port         -> Addr 'UDP
+    HTTPAddr :: HostName -> Port -> Bool -> Addr 'HTTP
+
+addrHostName :: Lens' (Addr a) HostName
+addrHostName f (UDPAddr  h p  ) = (\h' -> UDPAddr  h' p  ) <$> f h
+addrHostName f (HTTPAddr h p s) = (\h' -> HTTPAddr h' p s) <$> f h
+
+addrPort :: Lens' (Addr a) Port
+addrPort f (UDPAddr  h p  ) = (\p' -> UDPAddr  h p'  ) <$> f p
+addrPort f (HTTPAddr h p s) = (\p' -> HTTPAddr h p' s) <$> f p
+
+addrSecure :: Lens' (Addr 'HTTP) Bool
+addrSecure f (HTTPAddr h p s) = (\s' -> HTTPAddr h p s') <$> f s
 
 
 newtype Hex = Hex { unHex :: Text }

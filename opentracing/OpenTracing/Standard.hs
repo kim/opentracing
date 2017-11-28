@@ -7,8 +7,8 @@
 {-# LANGUAGE TemplateHaskell       #-}
 
 module OpenTracing.Standard
-    ( Env
-    , newEnv
+    ( StdEnv
+    , newStdEnv
     , envTraceID128bit
     , envSampler
 
@@ -34,20 +34,20 @@ import Prelude                    hiding (putStrLn)
 import System.Random.MWC
 
 
-data Env = Env
+data StdEnv = StdEnv
     { envPRNG           :: GenIO
     , _envSampler       :: Sampler
     , _envTraceID128bit :: Bool
     }
 
-newEnv :: MonadIO m => Sampler -> m Env
-newEnv samp = do
+newStdEnv :: MonadIO m => Sampler -> m StdEnv
+newStdEnv samp = do
     prng <- liftIO createSystemRandom
-    return Env { envPRNG = prng, _envSampler = samp, _envTraceID128bit = True }
+    return StdEnv { envPRNG = prng, _envSampler = samp, _envTraceID128bit = True }
 
-makeLenses ''Env
+makeLenses ''StdEnv
 
-stdTracer :: MonadIO m => Env -> SpanOpts -> m Span
+stdTracer :: MonadIO m => StdEnv -> SpanOpts -> m Span
 stdTracer r = flip runReaderT r . start
 
 stdReporter :: MonadIO m => FinishedSpan -> m ()
@@ -56,7 +56,7 @@ stdReporter f = liftIO $ report f
 --------------------------------------------------------------------------------
 -- Internal
 
-start :: (MonadIO m, MonadReader Env m) => SpanOpts -> m Span
+start :: (MonadIO m, MonadReader StdEnv m) => SpanOpts -> m Span
 start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
     ctx <- do
         p <- findParent <$> liftIO (freezeRefs spanOptRefs)
@@ -68,9 +68,9 @@ start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
 report :: FinishedSpan -> IO ()
 report = putStrLn . encodingToLazyByteString . spanE
 
-newTraceID :: (MonadIO m, MonadReader Env m) => m TraceID
+newTraceID :: (MonadIO m, MonadReader StdEnv m) => m TraceID
 newTraceID = do
-    Env{..} <- ask
+    StdEnv{..} <- ask
     hi <- if _envTraceID128bit then
               Just <$> liftIO (uniform envPRNG)
           else
@@ -78,12 +78,12 @@ newTraceID = do
     lo <- liftIO $ uniform envPRNG
     return TraceID { traceIdHi = hi, traceIdLo = lo }
 
-newSpanID :: (MonadIO m, MonadReader Env m) => m Word64
+newSpanID :: (MonadIO m, MonadReader StdEnv m) => m Word64
 newSpanID = asks envPRNG >>= liftIO . uniform
 
 freshContext
-    :: ( MonadIO         m
-       , MonadReader Env m
+    :: ( MonadIO            m
+       , MonadReader StdEnv m
        )
     => SpanOpts
     -> m SpanContext
@@ -105,8 +105,8 @@ freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
         }
 
 fromParent
-    :: ( MonadIO         m
-       , MonadReader Env m
+    :: ( MonadIO            m
+       , MonadReader StdEnv m
        )
     => SpanContext
     -> m SpanContext

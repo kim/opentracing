@@ -7,7 +7,7 @@
 {-# LANGUAGE TupleSections       #-}
 
 module OpenTracing.Propagation
-    ( Propagation(_Headers, _TextMap)
+    ( Propagation(..)
 
     , HasPropagation(propagation)
 
@@ -18,6 +18,8 @@ module OpenTracing.Propagation
     , _OTHeaders
     , _B3TextMap
     , _B3Headers
+
+    , _Headers'
     )
 where
 

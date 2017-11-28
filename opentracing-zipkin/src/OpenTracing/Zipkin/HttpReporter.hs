@@ -1,16 +1,29 @@
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE StrictData        #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module OpenTracing.Zipkin.HttpReporter
-    ( API(..)
-    , Env
-    , newEnv
-    , closeEnv
-    , withEnv
+    ( ZipkinOptions
+    , zipkinOptions
+    , zoManager
+    , zoApiVersion
+    , zoLocalEndpoint
+    , zoAddr
+    , zoLogfmt
+    , zoErrorLog
+
+    , API(..)
+
+    , defaultZipkinAddr
+
+    , Zipkin
+    , newZipkin
+    , closeZipkin
+    , withZipkin
 
     , zipkinHttpReporter
 
@@ -18,23 +31,20 @@ module OpenTracing.Zipkin.HttpReporter
     )
 where
 
-import Control.Concurrent.Async
-import Control.Concurrent.STM
-import Control.Exception         (AsyncException (ThreadKilled))
-import Control.Exception.Safe
 import Control.Lens              hiding (Context)
-import Control.Monad             (forever, void)
+import Control.Monad             (unless)
+import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Reader
 import Data.Aeson                hiding (Error)
 import Data.Aeson.Encoding
-import Data.ByteString.Builder   (toLazyByteString)
+import Data.ByteString.Builder
 import Data.Maybe                (catMaybes)
 import Data.Monoid
 import Data.Text.Lazy.Encoding   (decodeUtf8)
 import Network.HTTP.Client       hiding (port)
-import Network.HTTP.Types        (hContentType)
+import Network.HTTP.Types
 import OpenTracing.Log
+import OpenTracing.Reporting
 import OpenTracing.Span
 import OpenTracing.Tags
 import OpenTracing.Time
@@ -45,93 +55,88 @@ import OpenTracing.Zipkin.Types
 
 data API = V1 | V2
 
-data Env = Env
-    { envQ   :: TQueue FinishedSpan
-    , envRep :: Async ()
+newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
+
+data ZipkinOptions = ZipkinOptions
+    { _zoManager       :: Manager
+    , _zoApiVersion    :: API
+    , _zoLocalEndpoint :: Endpoint
+    , _zoAddr          :: Addr 'HTTP
+    , _zoLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
+    , _zoErrorLog      :: Builder -> IO ()
     }
 
--- XXX: support https
-newEnv :: API -> Endpoint -> String -> Port -> LogFieldsFormatter -> IO Env
-newEnv api loc zhost zport logfmt = do
-    q   <- newTQueueIO
-    rq  <- mkReq
-    mgr <- newManager defaultManagerSettings
-    Env q <$> reporter api rq mgr loc q logfmt
+makeLenses ''ZipkinOptions
+
+zipkinOptions :: Manager -> API -> Endpoint -> ZipkinOptions
+zipkinOptions mgr api loc = ZipkinOptions
+    { _zoManager       = mgr
+    , _zoApiVersion    = api
+    , _zoLocalEndpoint = loc
+    , _zoAddr          = defaultZipkinAddr
+    , _zoLogfmt        = jsonMap
+    , _zoErrorLog      = defaultErrorLog
+    }
+
+defaultZipkinAddr :: Addr 'HTTP
+defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False
+
+newZipkin :: ZipkinOptions -> IO Zipkin
+newZipkin opts@ZipkinOptions{_zoErrorLog=errlog,_zoApiVersion} = do
+    rq <- mkReq
+    fmap Zipkin
+        . newBatchEnv
+        . set boptErrorLog errlog . batchOptions
+        $ reporter opts rq
   where
     mkReq = do
-        let rqBase = "POST http://" <> zhost <> ":" <> show zport
-        case api of
+        let rqBase = "POST http://"
+                   <> view (zoAddr . addrHostName) opts
+                   <> ":"
+                   <> show (view (zoAddr . addrPort) opts)
+        case _zoApiVersion of
             V1 -> do
                 rq <- parseRequest $ rqBase <> "/api/v1/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/x-thrift")]
+                    , secure         = view (zoAddr . addrSecure) opts
                     }
             V2 -> do
                 rq <- parseRequest $ rqBase <> "/api/v2/spans"
                 return rq
                     { requestHeaders = [(hContentType, "application/json")]
+                    , secure         = view (zoAddr . addrSecure) opts
                     }
 
-closeEnv :: Env -> IO ()
-closeEnv = cancel . envRep
+closeZipkin :: Zipkin -> IO ()
+closeZipkin = closeBatchEnv . fromZipkin
 
-withEnv
+withZipkin
     :: ( MonadIO   m
        , MonadMask m
        )
-    => API
-    -> Endpoint
-    -> String
-    -> Port
-    -> LogFieldsFormatter
-    -> (Env -> m a)
+    => ZipkinOptions
+    -> (Zipkin -> m a)
     -> m a
-withEnv api loc zhost zport logfmt
-    = bracket (liftIO $ newEnv api loc zhost zport logfmt) (liftIO . closeEnv)
+withZipkin opts = bracket (liftIO $ newZipkin opts) (liftIO . closeZipkin)
 
 
-zipkinHttpReporter :: MonadIO m => Env -> FinishedSpan -> m ()
-zipkinHttpReporter r = flip runReaderT r . report
+zipkinHttpReporter :: MonadIO m => Zipkin -> FinishedSpan -> m ()
+zipkinHttpReporter = batchReporter . fromZipkin
 
-
-report :: (MonadIO m, MonadReader Env m) => FinishedSpan -> m ()
-report s = do
-    q <- asks envQ
-    liftIO . atomically $ writeTQueue q s
-
-reporter
-    :: API
-    -> Request
-    -> Manager
-    -> Endpoint
-    -> TQueue FinishedSpan
-    -> LogFieldsFormatter
-    -> IO (Async ())
-reporter api rq mgr loc q logfmt = async . handle drain . forever $
-    go (void . atomically $ peekTQueue q)
+reporter :: ZipkinOptions -> Request -> [FinishedSpan] -> IO ()
+reporter ZipkinOptions{..} rq spans = do
+    rs <- responseStatus <$> httpLbs rq { requestBody = body } _zoManager
+    unless (statusIsSuccessful rs) $
+        _zoErrorLog $ shortByteString "Error from Zipkin server: "
+                    <> intDec (statusCode rs)
+                    <> char8 '\n'
   where
-    go onEmpty = do
-        batch <- atomically $ pop 100 q
-        case batch of
-            [] -> onEmpty
-            xs -> mask_ $
-                    void (httpLbs rq { requestBody = body xs } mgr) -- XXX: check response status
-                        `catchAny` const (return ()) -- XXX: log something
-
-    body xs = RequestBodyLBS $ case api of
-        V1 -> thriftEncodeSpans $ map (toThriftSpan loc logfmt) xs
-        V2 -> encodingToLazyByteString $ list (spanE loc logfmt) xs
-
-    drain ThreadKilled = go (return ())
-    drain e            = throwM e
-
-pop :: Int -> TQueue a -> STM [a]
-pop 0 _ = pure []
-pop n q = do
-    v <- tryReadTQueue q
-    case v of
-        Nothing -> pure []
-        Just v' -> (v' :) <$> pop (n-1) q
+    body = RequestBodyLBS $ case _zoApiVersion of
+        V1 -> thriftEncodeSpans $
+                  map (toThriftSpan _zoLocalEndpoint _zoLogfmt) spans
+        V2 -> encodingToLazyByteString $
+                  list (spanE _zoLocalEndpoint _zoLogfmt) spans
 
 
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding

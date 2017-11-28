@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE ViewPatterns      #-}
 
 module OpenTracing.Zipkin.Thrift
@@ -74,7 +75,7 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
         $ annFromTags (view spanTags s)
 
     annFromTags :: Tags -> ([Thrift.Annotation], [Thrift.BinaryAnnotation])
-    annFromTags = foldl' go ([],[]) . HashMap.toList . fromTags
+    annFromTags = perhapsLocal . foldl' go ([],[]) . HashMap.toList . fromTags
       where
         go acc (SpanKind sk) =
             let ann = Thrift.Annotation
@@ -97,6 +98,16 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
                     , binaryAnnotation_host            = Just loc
                     }
              in second (ann:) acc
+
+        -- if we don't have a 'SpanKind', we're supposed to tell Zipkin about us
+        -- via a 'BinaryAnnotation'
+        perhapsLocal ([],bs) = ([],) . (:bs) $ Thrift.BinaryAnnotation
+            { binaryAnnotation_key             = Thrift.lOCAL_COMPONENT
+            , binaryAnnotation_value           = encodeUtf8 $ endpoint_service_name loc
+            , binaryAnnotation_annotation_type = Thrift.STRING
+            , binaryAnnotation_host            = Just loc
+            }
+        perhapsLocal xs = xs
 
     annFromLogs :: [LogRecord] -> [Thrift.Annotation]
     annFromLogs = foldl' go []
@@ -132,9 +143,9 @@ toThriftTag (BinaryT v) = (Thrift.BYTES, TString v)
 
 toThriftEndpoint :: Endpoint -> Thrift.Endpoint
 toThriftEndpoint Endpoint{..} = Thrift.Endpoint
-    { endpoint_ipv4         = packIPv4 $ maybe "127.0.0.1" fromIPv4 ipv4
+    { endpoint_ipv4         = packIPv4 $ fromIPv4 ipv4
     , endpoint_port         = maybe 0 (fromIntegral . fromPort) port
-    , endpoint_service_name = maybe "unknown" (view lazy) serviceName
+    , endpoint_service_name = view lazy serviceName
     , endpoint_ipv6         = packIPv6 . fromIPv6 <$> ipv6
     }
   where
