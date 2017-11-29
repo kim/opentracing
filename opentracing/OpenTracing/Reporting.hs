@@ -78,28 +78,41 @@ batchReporter :: MonadIO m => BatchEnv -> FinishedSpan -> m ()
 batchReporter BatchEnv{envQ} = liftIO . atomically . writeTQueue envQ
 
 consumer :: BatchOptions -> TQueue FinishedSpan -> IO (Async ())
-consumer opt@BatchOptions{..} q =
-    async . forever . withAsync (go False) $ \w ->
-        handleAsync drain $ do
-            wait w
-            void . atomically $ peekTQueue q
+consumer opt@BatchOptions{..} q = async . forever $ do
+    xs <- popBlocking
+    go False xs
   where
-    go draining = do
-        batch <- atomically $ pop _boptBatchSize q
-        case batch of
-            [] -> return ()
-            xs -> do
-                r <- timeout timeoutMicros $
-                         _boptReporter xs
-                             `catchAny` (logErr opt . ErrReporterException)
-                case r of
-                    Nothing -> logErr opt ErrReporterTimeout
-                    Just () -> when draining $ go True
+    popBlocking = atomically $ do
+        x <- readTQueue q
+        (x:) <$> pop (_boptBatchSize - 1) q
 
-    drain ThreadKilled = logErr opt ErrReporterCancelled          *> go True
-    drain e            = logErr opt (ErrReporterAsyncException e) *> throwM e
+    popNonblock = atomically $ pop _boptBatchSize q
+
+    go _     []    = pure ()
+    go True  batch = report batch *> drain
+    go False batch = withAsync (report batch) $ \a ->
+        timedWait a `catchAsync` \case
+            ThreadKilled -> do
+                logErr opt ErrReporterCancelled
+                timedWait a `finally` uninterruptibleCancel a
+                drain
+                throwM ThreadKilled
+
+            e -> logErr opt (ErrReporterAsyncException e) *> throwM e
+
+    report batch = _boptReporter batch `catchAny`
+        (logErr opt . ErrReporterException)
+
+    timedWait a = timeout timeoutMicros (wait a) >>= \case
+        Nothing -> logErr opt ErrReporterTimeout
+        _       -> pure ()
+
+    drain = do
+        logErr opt ErrReporterDraining
+        popNonblock >>= go True
 
     timeoutMicros = micros @NominalDiffTime $ fromIntegral _boptTimeoutSec
+
 
 pop :: Word16 -> TQueue a -> STM [a]
 pop 0 _ = pure []
@@ -114,6 +127,7 @@ data Err
     | ErrReporterTimeout
     | ErrReporterCancelled
     | ErrReporterAsyncException AsyncException
+    | ErrReporterDraining
 
 logErr :: BatchOptions -> Err -> IO ()
 logErr BatchOptions{_boptErrorLog=errlog} e = errlog $ msg e <> nl
@@ -126,7 +140,8 @@ logErr BatchOptions{_boptErrorLog=errlog} e = errlog $ msg e <> nl
     msg = \case
         ErrReporterException      ex -> sbs "Reporter Error: " <> ebs ex
         ErrReporterTimeout           -> sbs "Reporter timed out!"
-        ErrReporterCancelled         -> sbs "Batch reporter cancelled"
+        ErrReporterCancelled         -> sbs "Batch reporter cancelled, shutting down gracefully"
         ErrReporterAsyncException ex -> sbs "Batch reporter received async exception: " <> ebs ex
+        ErrReporterDraining          -> sbs "Draining batch reporter queue"
 
     nl = char8 '\n'
