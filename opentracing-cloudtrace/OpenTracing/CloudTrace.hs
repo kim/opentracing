@@ -12,6 +12,7 @@ module OpenTracing.CloudTrace
 
     , CloudTraceOptions
     , cloudTraceOptions
+    , simpleCloudTraceOptions
     , ctoProjectId
     , ctoManager
     , ctoLogger
@@ -83,6 +84,13 @@ cloudTraceOptions pid mgr creds = CloudTraceOptions
   where
     logger Error = defaultErrorLog
     logger _     = const $ pure ()
+
+
+simpleCloudTraceOptions :: ProjectId -> IO CloudTraceOptions
+simpleCloudTraceOptions pid = do
+    m <- newManager tlsManagerSettings
+    c <- getApplicationDefault m
+    return $ cloudTraceOptions pid m c
 
 
 newCloudTrace :: CloudTraceOptions -> IO CloudTrace
