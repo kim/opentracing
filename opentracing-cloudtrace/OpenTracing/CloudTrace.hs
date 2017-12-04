@@ -39,7 +39,7 @@ import           Data.List                 (groupBy)
 import           Data.List.NonEmpty        (NonEmpty (..), nonEmpty)
 import           Data.Maybe                (mapMaybe)
 import           Data.Semigroup
-import           Data.Text                 (Text)
+import           Data.Text                 (Text, dropAround)
 import qualified Data.Text.Lazy.Encoding   as LT
 import           Data.Time.Clock           (addUTCTime)
 import           Network.Google
@@ -147,9 +147,12 @@ toGoogSpan s
     . set tsSpanId       (view (spanContext . to ctxSpanID . re _Just) s)
     $ traceSpan
   where
-    zulu = encTxt . utcTime
+    zulu = unquote . encTxt . utcTime
     kind = toGoogSpanKind . getTagReify _SpanKind SpanKindKey
     endt = addUTCTime (view spanDuration s) (view spanStart s)
+
+    -- unfortunately, 'utcTime' quotes the result
+    unquote = dropAround (=='"')
 
 toGoogTags :: Tags -> TraceSpanLabels
 toGoogTags = traceSpanLabels . HashMap.foldlWithKey' tr mempty . fromTags
