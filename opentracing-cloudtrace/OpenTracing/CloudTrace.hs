@@ -1,10 +1,13 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE StrictData        #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 module OpenTracing.CloudTrace
     ( ProjectId
@@ -28,7 +31,7 @@ module OpenTracing.CloudTrace
 where
 
 import           Control.Lens
-import           Control.Monad             (void)
+import           Control.Monad             (unless, void)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Data.Aeson                (toEncoding)
@@ -45,7 +48,9 @@ import           Data.Time.Clock           (addUTCTime)
 import           Network.Google
 import           Network.Google.Auth
 import           Network.Google.CloudTrace
+import           Network.Google.Logging
 import           Network.HTTP.Client       (Manager)
+import           OpenTracing.Log
 import           OpenTracing.Reporting
 import           OpenTracing.Span
 import           OpenTracing.Tags          hiding (Error)
@@ -56,6 +61,7 @@ type ProjectId = Text
 
 type CloudTraceScopes =
     '[ "https://www.googleapis.com/auth/trace.append"
+     , "https://www.googleapis.com/auth/logging.write"
      , "https://www.googleapis.com/auth/cloud-platform"
      ]
 
@@ -63,6 +69,7 @@ newtype CloudTrace = CloudTrace { fromCloudTrace :: BatchEnv }
 
 data CloudTraceOptions = CloudTraceOptions
     { _ctoProjectId   :: Text
+    , _ctoResource    :: MonitoredResource
     , _ctoManager     :: Manager
     , _ctoLogger      :: Logger
     , _ctoCredentials :: Credentials CloudTraceScopes
@@ -72,11 +79,13 @@ makeLenses ''CloudTraceOptions
 
 cloudTraceOptions
     :: ProjectId
+    -> MonitoredResource
     -> Manager
     -> Credentials CloudTraceScopes
     -> CloudTraceOptions
-cloudTraceOptions pid mgr creds = CloudTraceOptions
+cloudTraceOptions pid res mgr creds = CloudTraceOptions
     { _ctoProjectId   = pid
+    , _ctoResource    = res
     , _ctoManager     = mgr
     , _ctoLogger      = logger
     , _ctoCredentials = creds
@@ -86,11 +95,21 @@ cloudTraceOptions pid mgr creds = CloudTraceOptions
     logger _     = const $ pure ()
 
 
-simpleCloudTraceOptions :: ProjectId -> IO CloudTraceOptions
-simpleCloudTraceOptions pid = do
+simpleCloudTraceOptions
+    :: ProjectId
+    -> Maybe MonitoredResource
+    -> IO CloudTraceOptions
+simpleCloudTraceOptions pid Nothing = simpleCloudTraceOptions pid $
+      Just
+    . set mrType   (Just "global")
+    . set mrLabels ( Just . monitoredResourceLabels
+                   $ HashMap.singleton "project_id" pid
+                   )
+    $ monitoredResource
+simpleCloudTraceOptions pid (Just res) = do
     m <- newManager tlsManagerSettings
     c <- getApplicationDefault m
-    return $ cloudTraceOptions pid m c
+    return $ cloudTraceOptions pid res m c
 
 
 newCloudTrace :: CloudTraceOptions -> IO CloudTrace
@@ -120,14 +139,50 @@ cloudTraceReporter = batchReporter . fromCloudTrace
 
 
 reporter :: CloudTraceOptions -> Env CloudTraceScopes -> [FinishedSpan] -> IO ()
-reporter CloudTraceOptions{_ctoProjectId=pid} goog spans =
+reporter CloudTraceOptions{_ctoProjectId=pid,_ctoResource=res} goog spans = do
     request $ projectsPatchTraces (set tTraces traces' traces) pid
+    unless (null logs) $
+        request $ entriesWrite (logrq logs)
   where
+    request :: (HasScope CloudTraceScopes a, GoogleRequest a) => a -> IO ()
     request = void . runResourceT . runGoogle goog . send
+
     traces' = mapMaybe (fmap (toGoogTrace pid) . nonEmpty)
             . groupBy ((==) `on` view (spanContext . to ctxTraceID))
             $ spans
 
+    logs    = concatMap (toGoogLogEntries pid res) spans
+    logrq e = set wlerEntries        e
+            . set wlerPartialSuccess (Just True)
+            . set wlerLogName        (Just $ "projects/" <> pid <> "/logs/tracing")
+            $ writeLogEntriesRequest
+
+
+toGoogLogEntries :: ProjectId -> MonitoredResource -> FinishedSpan -> [LogEntry]
+toGoogLogEntries p r s = map mkEntry (view spanLogs s)
+  where
+    traceId = "projects/" <> p <> "/traces/"
+           <> view (spanContext . to ctxTraceID . hexText) s
+
+#if MIN_VERSION_gogol_logging(0,3,1)
+    spanId  = view (spanContext . to ctxSpanID . hexText) s
+#endif
+
+    mkEntry lr
+        = set leTrace       (Just traceId)
+#if MIN_VERSION_gogol_logging(0,3,1)
+        . set leSpanId      (Just spanId)
+#endif
+        . set leTimestamp   (view (logTime . re _Just) lr)
+        . set leResource    (Just r)
+        . set leJSONPayload (Just $ json lr)
+        $ logEntry
+
+    json
+        = logEntryJSONPayload
+        . foldMap
+            (\lf -> HashMap.singleton (logFieldLabel lf) (logFieldValue lf))
+        . view logFields
 
 toGoogTrace :: ProjectId -> NonEmpty FinishedSpan -> Trace
 toGoogTrace p (s :| ss)
@@ -157,7 +212,6 @@ toGoogSpan s
 toGoogTags :: Tags -> TraceSpanLabels
 toGoogTags = traceSpanLabels . HashMap.foldlWithKey' tr mempty . fromTags
   where
-    -- TODO: map logs here somehow?
     tr m ComponentKey      v = HashMap.insert "/component"        (val v) m
     tr m HttpMethodKey     v = HashMap.insert "/http/method"      (val v) m
     tr m HttpStatusCodeKey v = HashMap.insert "/http/status_code" (val v) m

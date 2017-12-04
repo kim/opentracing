@@ -23,6 +23,7 @@ library
     , exceptions
     , gogol
     , gogol-cloudtrace
+    , gogol-logging
     , http-client
     , lens
     , opentracing
