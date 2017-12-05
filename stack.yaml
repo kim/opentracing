@@ -2,6 +2,7 @@ flags:
 extra-package-dbs: []
 packages:
 - opentracing
+- opentracing-cloudtrace
 - opentracing-examples
 - opentracing-http-client
 - opentracing-jaeger

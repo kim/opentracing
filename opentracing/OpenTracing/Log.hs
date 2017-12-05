@@ -12,6 +12,8 @@ module OpenTracing.Log
 
     , LogField(..)
     , logFieldLabel
+    , logFieldEncoding
+    , logFieldValue
 
     , LogFieldsFormatter
     , jsonAssoc
@@ -78,6 +80,14 @@ logFieldEncoding (Message    v) = Encoding.text v
 logFieldEncoding (Stack      v) = Encoding.string $ prettyCallStack v
 logFieldEncoding (ErrKind    v) = Encoding.text v
 logFieldEncoding (ErrObj     v) = Encoding.string $ show v
+
+logFieldValue :: LogField -> Value
+logFieldValue (LogField _ v) = toJSON $ show v
+logFieldValue (Event      v) = toJSON v
+logFieldValue (Message    v) = toJSON v
+logFieldValue (Stack      v) = toJSON $ prettyCallStack v
+logFieldValue (ErrKind    v) = toJSON v
+logFieldValue (ErrObj     v) = toJSON $ show v
 
 
 makeLenses ''LogRecord
