@@ -17,6 +17,7 @@ module OpenTracing.CloudTrace
     , cloudTraceOptions
     , simpleCloudTraceOptions
     , ctoProjectId
+    , ctoResource
     , ctoManager
     , ctoLogger
     , ctoCredentials
