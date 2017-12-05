@@ -1,5 +1,7 @@
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 module Network.Wai.Middleware.OpenTracing
     ( TracedApplication
@@ -12,6 +14,7 @@ import           Data.Maybe
 import           Data.Semigroup
 import qualified Data.Text          as Text
 import           Data.Text.Encoding (decodeUtf8)
+import           Network.HTTP.Types (Header)
 import           Network.Wai
 import           OpenTracing
 import           Prelude            hiding (span)
@@ -19,7 +22,7 @@ import           Prelude            hiding (span)
 
 type TracedApplication = ActiveSpan -> Application
 
-opentracing :: Tracing -> TracedApplication -> Application
+opentracing :: HasPropagation p [Header] => Tracing p -> TracedApplication -> Application
 opentracing t app req respond = do
     let ctx = traceExtract t (requestHeaders req)
     let opt = SpanOpts

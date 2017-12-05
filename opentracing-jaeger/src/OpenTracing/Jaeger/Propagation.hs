@@ -1,8 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module OpenTracing.Jaeger.Propagation
-    ( jaegerPropagation
+    ( Jaeger
+    , jaegerPropagation
 
     , _JaegerTextMap
     , _JaegerHeaders
@@ -25,11 +28,17 @@ import           OpenTracing.Span
 import           OpenTracing.Types
 
 
-jaegerPropagation :: Propagation
+data Jaeger
+
+jaegerPropagation :: Propagation Jaeger
 jaegerPropagation = Propagation
-    { _TextMap = _JaegerTextMap
-    , _Headers = _JaegerHeaders
-    }
+
+instance HasPropagation (Propagation Jaeger) (HashMap Text Text) where
+    propagation _ = _JaegerTextMap
+
+instance HasPropagation (Propagation Jaeger) [Header] where
+    propagation _ = _JaegerHeaders
+
 
 _JaegerTextMap :: Prism' (HashMap Text Text) SpanContext
 _JaegerTextMap = prism' fromCtx toCtx

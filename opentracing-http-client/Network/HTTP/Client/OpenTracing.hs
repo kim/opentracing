@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Network.HTTP.Client.OpenTracing
@@ -18,6 +19,7 @@ import           Network.HTTP.Client.Internal
     , getUri
     , responseStatus
     )
+import           Network.HTTP.Types           (Header)
 import           OpenTracing                  hiding (sampled)
 import           Prelude                      hiding (span)
 
@@ -35,9 +37,10 @@ import           Prelude                      hiding (span)
 -- :}
 --
 httpTraced
-    :: ( HasTracing  r
-       , MonadReader r m
-       , MonadIO     m
+    :: ( HasPropagation p [Header]
+       , HasTracing   r p
+       , MonadReader  r m
+       , MonadIO      m
        )
     => SpanRefs
     -> Request
@@ -49,7 +52,8 @@ httpTraced refs req mgr f = do
     liftIO $ httpTraced' t refs req mgr f
 
 httpTraced'
-    :: Tracing
+    :: HasPropagation p [Header]
+    => Tracing p
     -> SpanRefs
     -> Request
     -> Manager

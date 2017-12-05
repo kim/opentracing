@@ -1,15 +1,19 @@
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TupleSections         #-}
 
 module OpenTracing.Propagation
     ( Propagation(..)
-
-    , HasPropagation(propagation)
+    , HasPropagation(..)
+    , OpenTracing
+    , B3
 
     , otPropagation
     , b3Propagation
@@ -40,32 +44,34 @@ import           OpenTracing.Span
 import           OpenTracing.Types
 
 
-data Propagation = Propagation
-    { _TextMap :: Prism' (HashMap Text Text) SpanContext
-    , _Headers :: Prism' [Header]            SpanContext
-    }
+data Propagation (a :: k) = Propagation
 
-class HasPropagation c where
-    propagation :: Propagation -> Prism' c SpanContext
+class HasPropagation a c where
+    propagation :: proxy a -> Prism' c SpanContext
 
-instance HasPropagation (HashMap Text Text) where
-    propagation = _TextMap
-
-instance HasPropagation [Header] where
-    propagation = _Headers
+data OpenTracing
+data B3
 
 
-otPropagation :: Propagation
+otPropagation :: Propagation OpenTracing
 otPropagation = Propagation
-    { _TextMap = _OTTextMap
-    , _Headers = _OTHeaders
-    }
 
-b3Propagation :: Propagation
+instance HasPropagation (Propagation OpenTracing) (HashMap Text Text) where
+    propagation _ = _OTTextMap
+
+instance HasPropagation (Propagation OpenTracing) [Header] where
+    propagation _ = _OTHeaders
+
+
+b3Propagation :: Propagation B3
 b3Propagation = Propagation
-    { _TextMap = _B3TextMap
-    , _Headers = _B3Headers
-    }
+
+instance HasPropagation (Propagation B3) (HashMap Text Text) where
+    propagation _ = _B3TextMap
+
+instance HasPropagation (Propagation B3) [Header] where
+    propagation _ = _B3Headers
+
 
 _OTTextMap :: Prism' (HashMap Text Text) SpanContext
 _OTTextMap = prism' fromCtx toCtx
