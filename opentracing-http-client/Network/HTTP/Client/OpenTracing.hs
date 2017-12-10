@@ -37,10 +37,10 @@ import           Prelude                      hiding (span)
 -- :}
 --
 httpTraced
-    :: ( HasPropagation p [Header]
-       , HasTracing   r p
-       , MonadReader  r m
-       , MonadIO      m
+    :: ( HasCarrier  [Header] p
+       , HasTracing  r        p
+       , MonadReader r m
+       , MonadIO       m
        )
     => SpanRefs
     -> Request
@@ -52,8 +52,8 @@ httpTraced refs req mgr f = do
     liftIO $ httpTraced' t refs req mgr f
 
 httpTraced'
-    :: HasPropagation p [Header]
-    => Tracing p
+    :: HasCarrier [Header] p
+    => Tracing             p
     -> SpanRefs
     -> Request
     -> Manager

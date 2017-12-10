@@ -22,7 +22,11 @@ import           Prelude            hiding (span)
 
 type TracedApplication = ActiveSpan -> Application
 
-opentracing :: HasPropagation p [Header] => Tracing p -> TracedApplication -> Application
+opentracing
+    :: HasCarrier [Header] p
+    => Tracing             p
+    -> TracedApplication
+    -> Application
 opentracing t app req respond = do
     let ctx = traceExtract t (requestHeaders req)
     let opt = SpanOpts

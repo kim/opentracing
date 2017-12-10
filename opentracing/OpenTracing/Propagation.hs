@@ -1,19 +1,24 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE PolyKinds             #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE ConstraintKinds   #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE TypeOperators     #-}
 
 module OpenTracing.Propagation
-    ( Propagation(..)
-    , HasPropagation(..)
-    , OpenTracing
-    , B3
+    ( TextMap
+    , Headers
+--  , Binary
+
+    , Propagation
+    , Rec ((:&), RNil)
+
+    , Carrier(..)
+    , HasCarrier
+    , carrier
 
     , otPropagation
     , b3Propagation
@@ -38,42 +43,34 @@ import           Data.Monoid
 import           Data.Text            (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Read       as Text
+import           Data.Vinyl
 import           Data.Word
 import           Network.HTTP.Types   (Header)
 import           OpenTracing.Span
 import           OpenTracing.Types
 
 
-data Propagation (a :: k) = Propagation
+type TextMap = HashMap Text Text
+type Headers = [Header]
+--type Binary  = Lazy.ByteString
 
-class HasPropagation a c where
-    propagation :: proxy a -> Prism' c SpanContext
+type Propagation carriers = Rec Carrier carriers
 
-data OpenTracing
-data B3
+newtype Carrier a = Carrier { fromCarrier :: Prism' a SpanContext }
 
+type HasCarrier c cs = c ∈ cs
 
-otPropagation :: Propagation OpenTracing
-otPropagation = Propagation
+carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
+carrier c = fromCarrier . view (rlens c)
 
-instance HasPropagation (Propagation OpenTracing) (HashMap Text Text) where
-    propagation _ = _OTTextMap
+otPropagation :: Propagation '[TextMap, Headers]
+otPropagation = Carrier _OTTextMap :& Carrier _OTHeaders :& RNil
 
-instance HasPropagation (Propagation OpenTracing) [Header] where
-    propagation _ = _OTHeaders
-
-
-b3Propagation :: Propagation B3
-b3Propagation = Propagation
-
-instance HasPropagation (Propagation B3) (HashMap Text Text) where
-    propagation _ = _B3TextMap
-
-instance HasPropagation (Propagation B3) [Header] where
-    propagation _ = _B3Headers
+b3Propagation :: Propagation '[TextMap, Headers]
+b3Propagation = Carrier _B3TextMap :& Carrier _B3Headers :& RNil
 
 
-_OTTextMap :: Prism' (HashMap Text Text) SpanContext
+_OTTextMap :: Prism' TextMap SpanContext
 _OTTextMap = prism' fromCtx toCtx
   where
     fromCtx c@SpanContext{..} = HashMap.fromList $
@@ -90,7 +87,7 @@ _OTTextMap = prism' fromCtx toCtx
         <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
 
-_OTHeaders :: Prism' [Header] SpanContext
+_OTHeaders :: Prism' Headers SpanContext
 _OTHeaders = _Headers' _OTTextMap
 
 _OTSampled :: Prism' Text Sampled
@@ -103,7 +100,7 @@ _OTSampled = prism' enc dec
           . fmap (\(x,_) -> Just $ if x == (1 :: Word8) then Sampled else NotSampled)
           . Text.decimal
 
-_B3TextMap :: Prism' (HashMap Text Text) SpanContext
+_B3TextMap :: Prism' TextMap SpanContext
 _B3TextMap = prism' fromCtx toCtx
   where
     fromCtx ctx@SpanContext{..} = HashMap.fromList . catMaybes $
@@ -128,11 +125,11 @@ _B3TextMap = prism' fromCtx toCtx
         "1" -> Just Sampled
         _   -> Nothing
 
-_B3Headers :: Prism' [Header] SpanContext
+_B3Headers :: Prism' Headers SpanContext
 _B3Headers = _Headers' _B3TextMap
 
 -- XXX: ensure headers are actually compliant with RFC 7230, Section 3.2.4
-_Headers' :: Prism' (HashMap Text Text) SpanContext -> Prism' [Header] SpanContext
+_Headers' :: Prism' TextMap SpanContext -> Prism' Headers SpanContext
 _Headers' _TextMap = prism' fromCtx toCtx
   where
     fromCtx
