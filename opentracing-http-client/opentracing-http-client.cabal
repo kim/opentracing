@@ -19,7 +19,6 @@ library
   build-depends:
       base
     , http-client
-    , http-types
     , lens
     , mtl
     , opentracing

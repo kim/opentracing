@@ -14,7 +14,6 @@ import           Data.Maybe
 import           Data.Semigroup
 import qualified Data.Text          as Text
 import           Data.Text.Encoding (decodeUtf8)
-import           Network.HTTP.Types (Header)
 import           Network.Wai
 import           OpenTracing
 import           Prelude            hiding (span)
@@ -23,8 +22,8 @@ import           Prelude            hiding (span)
 type TracedApplication = ActiveSpan -> Application
 
 opentracing
-    :: HasCarrier [Header] p
-    => Tracing             p
+    :: HasCarrier Headers p
+    => Tracing            p
     -> TracedApplication
     -> Application
 opentracing t app req respond = do

@@ -19,7 +19,6 @@ import           Network.HTTP.Client.Internal
     , getUri
     , responseStatus
     )
-import           Network.HTTP.Types           (Header)
 import           OpenTracing                  hiding (sampled)
 import           Prelude                      hiding (span)
 
@@ -37,8 +36,8 @@ import           Prelude                      hiding (span)
 -- :}
 --
 httpTraced
-    :: ( HasCarrier  [Header] p
-       , HasTracing  r        p
+    :: ( HasCarrier  Headers p
+       , HasTracing  r       p
        , MonadReader r m
        , MonadIO       m
        )
@@ -52,8 +51,8 @@ httpTraced refs req mgr f = do
     liftIO $ httpTraced' t refs req mgr f
 
 httpTraced'
-    :: HasCarrier [Header] p
-    => Tracing             p
+    :: HasCarrier Headers p
+    => Tracing            p
     -> SpanRefs
     -> Request
     -> Manager
