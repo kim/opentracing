@@ -76,10 +76,10 @@ runTracing = flip runReaderT
 
 
 traced
-    :: ( HasTracing   r   p
-       , MonadReader  r m
-       , MonadMask      m
-       , MonadIO        m
+    :: ( HasTracing  r   p
+       , MonadReader r m
+       , MonadMask     m
+       , MonadIO       m
        )
     => SpanOpts
     -> (ActiveSpan -> m a)
