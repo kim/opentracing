@@ -18,6 +18,7 @@ module OpenTracing.Propagation
 
     , Carrier(..)
     , HasCarrier
+    , HasCarriers
     , carrier
 
     , otPropagation
@@ -58,7 +59,8 @@ type Propagation carriers = Rec Carrier carriers
 
 newtype Carrier a = Carrier { fromCarrier :: Prism' a SpanContext }
 
-type HasCarrier c cs = c ∈ cs
+type HasCarrier  c  cs = c  ∈ cs
+type HasCarriers cs ds = cs ⊆ ds
 
 carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
 carrier c = fromCarrier . view (rlens c)
