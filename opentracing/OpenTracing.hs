@@ -66,7 +66,7 @@ traceExtract p = preview (carrier (Proxy @c) (tracingPropagation p))
 
 
 class HasTracing a p | a -> p where
-    tracing :: Lens' a (Tracing p)
+    tracing :: Getting r a (Tracing p)
 
 instance HasTracing (Tracing p) p where
     tracing = id
