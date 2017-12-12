@@ -8,7 +8,9 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TupleSections          #-}
+{-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
 
@@ -25,6 +27,9 @@ module OpenTracing.Propagation
     , HasCarrier
     , HasCarriers
     , carrier
+
+    , traceInject
+    , traceExtract
 
     , otPropagation
     , b3Propagation
@@ -46,6 +51,7 @@ import           Data.HashMap.Strict  (HashMap)
 import qualified Data.HashMap.Strict  as HashMap
 import           Data.Maybe           (catMaybes)
 import           Data.Monoid
+import           Data.Proxy
 import           Data.Text            (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Read       as Text
@@ -78,6 +84,14 @@ type HasCarriers cs ds = cs ⊆ ds
 
 carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
 carrier c = fromCarrier . view (rlens c)
+
+
+traceInject :: forall c p. HasCarrier c p => Propagation p -> SpanContext -> c
+traceInject p = review (carrier (Proxy @c) p)
+
+traceExtract :: forall c p. HasCarrier c p => Propagation p -> c -> Maybe SpanContext
+traceExtract p = preview (carrier (Proxy @c) p)
+
 
 otPropagation :: Propagation '[TextMap, Headers]
 otPropagation = Carrier _OTTextMap :& Carrier _OTHeaders :& RNil

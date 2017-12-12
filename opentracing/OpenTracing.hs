@@ -1,11 +1,8 @@
 {-# LANGUAGE BangPatterns          #-}
-{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StrictData            #-}
-{-# LANGUAGE TypeApplications      #-}
 
 module OpenTracing
     ( module OpenTracing.Log
@@ -18,9 +15,6 @@ module OpenTracing
     , Tracing(..)
     , HasTracing(..)
     , runTracing
-
-    , traceInject
-    , traceExtract
 
     , traced
     , traced'
@@ -38,7 +32,6 @@ import Control.Monad           (void)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.List.NonEmpty      (NonEmpty (..))
-import Data.Proxy
 import Data.Time.Clock
 import OpenTracing.Log
 import OpenTracing.Propagation
@@ -53,14 +46,6 @@ data Tracing = Tracing
     { traceStart  :: forall m. MonadIO m => SpanOpts     -> m Span
     , traceReport :: forall m. MonadIO m => FinishedSpan -> m ()
     }
-
-
-traceInject :: forall c p. HasCarrier c p => Propagation p -> SpanContext -> c
-traceInject p = review (carrier (Proxy @c) p)
-
-traceExtract :: forall c p. HasCarrier c p => Propagation p -> c -> Maybe SpanContext
-traceExtract p = preview (carrier (Proxy @c) p)
-
 
 class HasTracing a where
     tracing :: Getting r a Tracing
