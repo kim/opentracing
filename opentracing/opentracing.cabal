@@ -49,6 +49,7 @@ library
     , time
     , transformers
     , unordered-containers
+    , vinyl
 
   default-language:  Haskell2010
   ghc-options:       -Wall -funbox-small-strict-fields

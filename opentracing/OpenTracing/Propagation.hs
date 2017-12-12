@@ -1,15 +1,30 @@
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE TupleSections          #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE TypeSynonymInstances   #-}
 
 module OpenTracing.Propagation
-    ( Propagation(..)
+    ( TextMap
+    , Headers
+--  , Binary
 
-    , HasPropagation(propagation)
+    , Propagation
+    , Rec ((:&), RNil)
+    , HasPropagation(..)
+
+    , Carrier(..)
+    , HasCarrier
+    , HasCarriers
+    , carrier
 
     , otPropagation
     , b3Propagation
@@ -34,40 +49,44 @@ import           Data.Monoid
 import           Data.Text            (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Read       as Text
+import           Data.Vinyl
 import           Data.Word
 import           Network.HTTP.Types   (Header)
 import           OpenTracing.Span
 import           OpenTracing.Types
 
 
-data Propagation = Propagation
-    { _TextMap :: Prism' (HashMap Text Text) SpanContext
-    , _Headers :: Prism' [Header]            SpanContext
-    }
-
-class HasPropagation c where
-    propagation :: Propagation -> Prism' c SpanContext
-
-instance HasPropagation (HashMap Text Text) where
-    propagation = _TextMap
-
-instance HasPropagation [Header] where
-    propagation = _Headers
+type TextMap = HashMap Text Text
+type Headers = [Header]
+--type Binary  = Lazy.ByteString
 
 
-otPropagation :: Propagation
-otPropagation = Propagation
-    { _TextMap = _OTTextMap
-    , _Headers = _OTHeaders
-    }
+type Propagation carriers = Rec Carrier carriers
 
-b3Propagation :: Propagation
-b3Propagation = Propagation
-    { _TextMap = _B3TextMap
-    , _Headers = _B3Headers
-    }
+class HasPropagation a p | a -> p where
+    propagation :: Getting r a (Propagation p)
 
-_OTTextMap :: Prism' (HashMap Text Text) SpanContext
+instance HasPropagation (Propagation p) p where
+    propagation = id
+
+
+newtype Carrier a = Carrier { fromCarrier :: Prism' a SpanContext }
+
+type HasCarrier  c  cs = c  ∈ cs
+type HasCarriers cs ds = cs ⊆ ds
+
+
+carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
+carrier c = fromCarrier . view (rlens c)
+
+otPropagation :: Propagation '[TextMap, Headers]
+otPropagation = Carrier _OTTextMap :& Carrier _OTHeaders :& RNil
+
+b3Propagation :: Propagation '[TextMap, Headers]
+b3Propagation = Carrier _B3TextMap :& Carrier _B3Headers :& RNil
+
+
+_OTTextMap :: Prism' TextMap SpanContext
 _OTTextMap = prism' fromCtx toCtx
   where
     fromCtx c@SpanContext{..} = HashMap.fromList $
@@ -84,7 +103,7 @@ _OTTextMap = prism' fromCtx toCtx
         <*> pure (HashMap.filterWithKey (\k _ -> "ot-baggage-" `isPrefixOf` k) m)
 
 
-_OTHeaders :: Prism' [Header] SpanContext
+_OTHeaders :: Prism' Headers SpanContext
 _OTHeaders = _Headers' _OTTextMap
 
 _OTSampled :: Prism' Text Sampled
@@ -97,7 +116,7 @@ _OTSampled = prism' enc dec
           . fmap (\(x,_) -> Just $ if x == (1 :: Word8) then Sampled else NotSampled)
           . Text.decimal
 
-_B3TextMap :: Prism' (HashMap Text Text) SpanContext
+_B3TextMap :: Prism' TextMap SpanContext
 _B3TextMap = prism' fromCtx toCtx
   where
     fromCtx ctx@SpanContext{..} = HashMap.fromList . catMaybes $
@@ -122,11 +141,11 @@ _B3TextMap = prism' fromCtx toCtx
         "1" -> Just Sampled
         _   -> Nothing
 
-_B3Headers :: Prism' [Header] SpanContext
+_B3Headers :: Prism' Headers SpanContext
 _B3Headers = _Headers' _B3TextMap
 
 -- XXX: ensure headers are actually compliant with RFC 7230, Section 3.2.4
-_Headers' :: Prism' (HashMap Text Text) SpanContext -> Prism' [Header] SpanContext
+_Headers' :: Prism' TextMap SpanContext -> Prism' Headers SpanContext
 _Headers' _TextMap = prism' fromCtx toCtx
   where
     fromCtx

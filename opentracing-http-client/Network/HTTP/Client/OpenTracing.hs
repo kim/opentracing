@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Network.HTTP.Client.OpenTracing
@@ -35,9 +36,11 @@ import           Prelude                      hiding (span)
 -- :}
 --
 httpTraced
-    :: ( HasTracing  r
-       , MonadReader r m
-       , MonadIO     m
+    :: ( HasCarrier     Headers p
+       , HasPropagation r       p
+       , HasTracing     r
+       , MonadReader    r m
+       , MonadIO          m
        )
     => SpanRefs
     -> Request
@@ -45,17 +48,19 @@ httpTraced
     -> (Request -> Manager -> IO a)
     -> m (Traced a)
 httpTraced refs req mgr f = do
-    t <- view tracing
-    liftIO $ httpTraced' t refs req mgr f
+    (t,p) <- (,) <$> view tracing <*> view propagation
+    liftIO $ httpTraced' t p refs req mgr f
 
 httpTraced'
-    :: Tracing
+    :: HasCarrier Headers p
+    => Tracing
+    -> Propagation        p
     -> SpanRefs
     -> Request
     -> Manager
     -> (Request -> Manager -> IO a)
     -> IO (Traced a)
-httpTraced' t refs req mgr f = do
+httpTraced' t p refs req mgr f = do
     sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
 
     let opt = SpanOpts
@@ -85,5 +90,5 @@ httpTraced' t refs req mgr f = do
         }
 
     inject rq ctx = rq
-        { requestHeaders = requestHeaders rq <> traceInject t ctx
+        { requestHeaders = requestHeaders rq <> traceInject p ctx
         }

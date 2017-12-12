@@ -1,5 +1,7 @@
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 module Network.Wai.Middleware.OpenTracing
     ( TracedApplication
@@ -19,9 +21,14 @@ import           Prelude            hiding (span)
 
 type TracedApplication = ActiveSpan -> Application
 
-opentracing :: Tracing -> TracedApplication -> Application
-opentracing t app req respond = do
-    let ctx = traceExtract t (requestHeaders req)
+opentracing
+    :: HasCarrier Headers p
+    => Tracing
+    -> Propagation        p
+    -> TracedApplication
+    -> Application
+opentracing t p app req respond = do
+    let ctx = traceExtract p (requestHeaders req)
     let opt = SpanOpts
             { spanOptOperation = Text.intercalate "/" (pathInfo req)
             , spanOptRefs      = (\x -> set refPropagated x mempty)

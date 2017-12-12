@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -13,25 +14,21 @@ where
 
 import           Control.Lens
 import           Data.Bits
-import           Data.HashMap.Strict     (HashMap)
 import qualified Data.HashMap.Strict     as HashMap
 import           Data.Monoid
 import           Data.Text               (Text, isPrefixOf)
 import qualified Data.Text               as Text
 import qualified Data.Text.Read          as Text
-import           Network.HTTP.Types      (Header)
 import           OpenTracing.Propagation
 import           OpenTracing.Span
 import           OpenTracing.Types
 
 
-jaegerPropagation :: Propagation
-jaegerPropagation = Propagation
-    { _TextMap = _JaegerTextMap
-    , _Headers = _JaegerHeaders
-    }
+jaegerPropagation :: Propagation '[TextMap, Headers]
+jaegerPropagation = Carrier _JaegerTextMap :& Carrier _JaegerHeaders :& RNil
 
-_JaegerTextMap :: Prism' (HashMap Text Text) SpanContext
+
+_JaegerTextMap :: Prism' TextMap SpanContext
 _JaegerTextMap = prism' fromCtx toCtx
   where
     fromCtx c = HashMap.fromList $
@@ -43,7 +40,7 @@ _JaegerTextMap = prism' fromCtx toCtx
                     (HashMap.filterWithKey (\k _ -> "uberctx-" `isPrefixOf` k) m))
         $ HashMap.lookup "uber-trace-id" m >>= preview _UberTraceId
 
-_JaegerHeaders :: Prism' [Header] SpanContext
+_JaegerHeaders :: Prism' Headers SpanContext
 _JaegerHeaders = _Headers' _JaegerTextMap
 
 _UberTraceId :: Prism' Text SpanContext
