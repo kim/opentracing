@@ -23,6 +23,9 @@ module OpenTracing.Jaeger.CollectorReporter
     , jaegerCollectorReporter
 
     , jaegerPropagation
+
+    , newManager
+    , defaultManagerSettings
     )
 where
 

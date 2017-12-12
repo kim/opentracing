@@ -28,6 +28,9 @@ module OpenTracing.CloudTrace
     , withCloudTrace
 
     , cloudTraceReporter
+
+    , newManager
+    , tlsManagerSettings
     )
 where
 

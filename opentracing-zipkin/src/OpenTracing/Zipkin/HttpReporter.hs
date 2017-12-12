@@ -28,6 +28,9 @@ module OpenTracing.Zipkin.HttpReporter
     , zipkinHttpReporter
 
     , Endpoint(..)
+
+    , newManager
+    , defaultManagerSettings
     )
 where
 
