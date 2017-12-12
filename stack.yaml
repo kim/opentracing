@@ -10,5 +10,6 @@ packages:
 - opentracing-zipkin
 extra-deps:
 - thrift-0.10.0
-allow-newer: true
+- optparse-applicative-0.14.0.0
+allow-newer: true # required for thrift
 resolver: lts-9.6

@@ -57,6 +57,7 @@ import OpenTracing.Zipkin.Types
 
 
 data API = V1 | V2
+    deriving (Show, Read)
 
 newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 

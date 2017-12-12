@@ -17,10 +17,11 @@ executable opentracing-example-simple
 
   build-depends:
       base
-    , http-client
     , opentracing
+    , opentracing-cloudtrace
     , opentracing-jaeger
     , opentracing-zipkin
+    , optparse-applicative    >= 0.14
 
   default-language:  Haskell2010
   ghc-options:       -Wall -O2
