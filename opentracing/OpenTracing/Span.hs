@@ -24,6 +24,10 @@ module OpenTracing.Span
     , mkActive
     , modifyActiveSpan
     , readActiveSpan
+    , addLogRecord
+    , addLogRecord'
+    , setBaggageItem
+    , getBaggageItem
 
     , FinishedSpan
     , traceFinish
@@ -64,8 +68,9 @@ import Data.Aeson             (ToJSON (..), object, (.=))
 import Data.Aeson.Encoding    (int, pairs)
 import Data.Bool              (bool)
 import Data.Foldable
-import Data.HashMap.Strict    (HashMap)
+import Data.HashMap.Strict    (HashMap, insert)
 import Data.IORef
+import Data.List.NonEmpty     (NonEmpty (..))
 import Data.Monoid
 import Data.Text              (Text)
 import Data.Time.Clock
@@ -77,11 +82,11 @@ import Prelude                hiding (span)
 
 
 data SpanContext = SpanContext
-    { ctxTraceID       :: TraceID
-    , ctxSpanID        :: Word64
-    , ctxParentSpanID  :: Maybe Word64
-    , _ctxSampled      :: Sampled
-    , _ctxBaggage      :: HashMap Text Text
+    { ctxTraceID      :: TraceID
+    , ctxSpanID       :: Word64
+    , ctxParentSpanID :: Maybe Word64
+    , _ctxSampled     :: Sampled
+    , _ctxBaggage     :: HashMap Text Text
     }
 
 instance ToJSON SpanContext where
@@ -295,3 +300,21 @@ instance HasRefs FinishedSpan [Reference] where
 
 spanDuration :: Lens' FinishedSpan NominalDiffTime
 spanDuration = fDuration
+
+
+addLogRecord :: ActiveSpan -> LogField -> IO ()
+addLogRecord s f = addLogRecord' s f []
+
+addLogRecord' :: ActiveSpan -> LogField -> [LogField] -> IO ()
+addLogRecord' s f fs = do
+    t <- getCurrentTime
+    modifyActiveSpan s $
+        over spanLogs (LogRecord t (f :| fs):)
+
+
+setBaggageItem :: ActiveSpan -> Text -> Text -> IO ()
+setBaggageItem s k v = modifyActiveSpan s $
+    over (spanContext . ctxBaggage) (insert k v)
+
+getBaggageItem :: ActiveSpan -> Text -> IO (Maybe Text)
+getBaggageItem s k = view (spanContext . ctxBaggage . at k) <$> readActiveSpan s
