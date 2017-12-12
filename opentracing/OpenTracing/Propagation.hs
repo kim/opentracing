@@ -1,12 +1,16 @@
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TupleSections     #-}
-{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE TupleSections          #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE TypeSynonymInstances   #-}
 
 module OpenTracing.Propagation
     ( TextMap
@@ -15,6 +19,7 @@ module OpenTracing.Propagation
 
     , Propagation
     , Rec ((:&), RNil)
+    , HasPropagation(..)
 
     , Carrier(..)
     , HasCarrier
@@ -55,12 +60,21 @@ type TextMap = HashMap Text Text
 type Headers = [Header]
 --type Binary  = Lazy.ByteString
 
+
 type Propagation carriers = Rec Carrier carriers
+
+class HasPropagation a p | a -> p where
+    propagation :: Getting r a (Propagation p)
+
+instance HasPropagation (Propagation p) p where
+    propagation = id
+
 
 newtype Carrier a = Carrier { fromCarrier :: Prism' a SpanContext }
 
 type HasCarrier  c  cs = c  ∈ cs
 type HasCarriers cs ds = cs ⊆ ds
+
 
 carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
 carrier c = fromCarrier . view (rlens c)

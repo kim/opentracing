@@ -23,11 +23,12 @@ type TracedApplication = ActiveSpan -> Application
 
 opentracing
     :: HasCarrier Headers p
-    => Tracing            p
+    => Tracing
+    -> Propagation        p
     -> TracedApplication
     -> Application
-opentracing t app req respond = do
-    let ctx = traceExtract t (requestHeaders req)
+opentracing t p app req respond = do
+    let ctx = traceExtract p (requestHeaders req)
     let opt = SpanOpts
             { spanOptOperation = Text.intercalate "/" (pathInfo req)
             , spanOptRefs      = (\x -> set refPropagated x mempty)

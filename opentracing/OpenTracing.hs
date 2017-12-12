@@ -1,13 +1,11 @@
-{-# LANGUAGE BangPatterns           #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE NamedFieldPuns         #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE StrictData             #-}
-{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module OpenTracing
     ( module OpenTracing.Log
@@ -51,32 +49,31 @@ import OpenTracing.Types
 import Prelude                 hiding (span)
 
 
-data Tracing p = Tracing
-    { traceStart         :: forall m. MonadIO m => SpanOpts     -> m Span
-    , traceReport        :: forall m. MonadIO m => FinishedSpan -> m ()
-    , tracingPropagation :: Propagation p
+data Tracing = Tracing
+    { traceStart  :: forall m. MonadIO m => SpanOpts     -> m Span
+    , traceReport :: forall m. MonadIO m => FinishedSpan -> m ()
     }
 
 
-traceInject :: forall c p. HasCarrier c p => Tracing p -> SpanContext -> c
-traceInject p = review (carrier (Proxy @c) (tracingPropagation p))
+traceInject :: forall c p. HasCarrier c p => Propagation p -> SpanContext -> c
+traceInject p = review (carrier (Proxy @c) p)
 
-traceExtract :: forall c p. HasCarrier c p => Tracing p -> c -> Maybe SpanContext
-traceExtract p = preview (carrier (Proxy @c) (tracingPropagation p))
+traceExtract :: forall c p. HasCarrier c p => Propagation p -> c -> Maybe SpanContext
+traceExtract p = preview (carrier (Proxy @c) p)
 
 
-class HasTracing a p | a -> p where
-    tracing :: Getting r a (Tracing p)
+class HasTracing a where
+    tracing :: Getting r a Tracing
 
-instance HasTracing (Tracing p) p where
+instance HasTracing Tracing where
     tracing = id
 
-runTracing :: Monad m => Tracing p -> ReaderT (Tracing p) m a -> m a
+runTracing :: Monad m => Tracing -> ReaderT Tracing m a -> m a
 runTracing = flip runReaderT
 
 
 traced
-    :: ( HasTracing  r   p
+    :: ( HasTracing  r
        , MonadReader r m
        , MonadMask     m
        , MonadIO       m
@@ -87,7 +84,7 @@ traced
 traced opt f = view tracing >>= \t -> traced' t opt f
 
 traced_
-    :: ( HasTracing  r   p
+    :: ( HasTracing  r
        , MonadReader r m
        , MonadMask     m
        , MonadIO       m
@@ -98,7 +95,7 @@ traced_
 traced_ opt f = tracedResult <$> traced opt f
 
 traced__
-    :: ( HasTracing  r   p
+    :: ( HasTracing  r
        , MonadReader r m
        , MonadMask     m
        , MonadIO       m
@@ -112,7 +109,7 @@ traced'
     :: ( MonadMask m
        , MonadIO   m
        )
-    => Tracing p
+    => Tracing
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m (Traced a)
@@ -140,7 +137,7 @@ traced'_
     :: ( MonadMask m
        , MonadIO   m
        )
-    => Tracing p
+    => Tracing
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m a
@@ -150,7 +147,7 @@ traced'__
     :: ( MonadMask m
        , MonadIO   m
        )
-    => Tracing p
+    => Tracing
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m ()
