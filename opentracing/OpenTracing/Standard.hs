@@ -17,20 +17,15 @@ module OpenTracing.Standard
     )
 where
 
-import Control.Lens               hiding (Context, (.=))
+import Control.Lens                 hiding (Context, (.=))
 import Control.Monad.Reader
-import Data.Aeson                 hiding (Error)
-import Data.Aeson.Encoding
-import Data.ByteString.Lazy.Char8 (putStrLn)
-import Data.Foldable              (toList)
 import Data.Monoid
 import Data.Word
-import GHC.Stack                  (prettyCallStack)
-import OpenTracing.Log
-import OpenTracing.Sampling       (Sampler (runSampler))
+import OpenTracing.Reporting.Stdio (stdoutReporter)
+import OpenTracing.Sampling         (Sampler (runSampler))
 import OpenTracing.Span
 import OpenTracing.Types
-import Prelude                    hiding (putStrLn)
+import Prelude                      hiding (putStrLn)
 import System.Random.MWC
 
 
@@ -51,7 +46,7 @@ stdTracer :: MonadIO m => StdEnv -> SpanOpts -> m Span
 stdTracer r = flip runReaderT r . start
 
 stdReporter :: MonadIO m => FinishedSpan -> m ()
-stdReporter f = liftIO $ report f
+stdReporter = stdoutReporter
 
 --------------------------------------------------------------------------------
 -- Internal
@@ -64,9 +59,6 @@ start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
             Nothing -> freshContext so
             Just p' -> fromParent   (refCtx p')
     newSpan ctx spanOptOperation spanOptRefs spanOptTags
-
-report :: FinishedSpan -> IO ()
-report = putStrLn . encodingToLazyByteString . spanE
 
 newTraceID :: (MonadIO m, MonadReader StdEnv m) => m TraceID
 newTraceID = do
@@ -119,31 +111,3 @@ fromParent p = do
         , _ctxSampled     = view ctxSampled p
         , _ctxBaggage     = view ctxBaggage p
         }
-
-spanE :: FinishedSpan -> Encoding
-spanE s = pairs $
-       pair "operation"  (text $ view spanOperation s)
-    <> pair "start"      (utcTime $ view spanStart s)
-    <> pair "duration"   (double . realToFrac $ view spanDuration s)
-    <> pair "context"    (toEncoding $ view spanContext s)
-    <> pair "references" (list refE . toList $ view spanRefs s)
-    <> pair "tags"       (toEncoding $ view spanTags s)
-    <> pair "logs"       (list logRecE . reverse $ view spanLogs s)
-
-refE :: Reference -> Encoding
-refE (ChildOf     ctx) = pairs . pair "child_of"     . toEncoding $ ctx
-refE (FollowsFrom ctx) = pairs . pair "follows_from" . toEncoding $ ctx
-
-logRecE :: LogRecord -> Encoding
-logRecE r = pairs $
-       pair "time"   (utcTime (view logTime r))
-    <> pair "fields" (list logFieldE . toList $ view logFields r)
-
-logFieldE :: LogField -> Encoding
-logFieldE f = pairs . pair (logFieldLabel f) $ case f of
-    Event      x -> text x
-    Message    x -> text x
-    Stack      x -> string . prettyCallStack $ x
-    ErrKind    x -> text x
-    ErrObj     x -> string . show $ x
-    LogField _ x -> string . show $ x

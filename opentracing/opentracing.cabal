@@ -19,6 +19,9 @@ library
       OpenTracing.Log
       OpenTracing.Propagation
       OpenTracing.Reporting
+      OpenTracing.Reporting.Batch
+      OpenTracing.Reporting.Pure
+      OpenTracing.Reporting.Stdio
       OpenTracing.Sampling
       OpenTracing.Span
       OpenTracing.Standard
@@ -49,6 +52,7 @@ library
     , time
     , transformers
     , unordered-containers
+    , vector
     , vinyl
 
   default-language:  Haskell2010
