@@ -1,5 +1,6 @@
 {-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StrictData      #-}
 
 module OpenTracing.Reporting.Pure
     ( noReporter
