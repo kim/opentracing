@@ -15,7 +15,7 @@ where
 import           Control.Lens
 import           Data.Bifunctor
 import           Data.Bits
-import           Data.ByteString.Builder  (toLazyByteString)
+import           Data.ByteString.Builder
 import qualified Data.ByteString.Lazy     as Lazy
 import           Data.ByteString.Lens
 import           Data.Foldable            (foldl', toList)
@@ -93,7 +93,7 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
             let (anntyp, annval) = toThriftTag v
                 ann              = Thrift.BinaryAnnotation
                     { binaryAnnotation_key             = view lazy k
-                    , binaryAnnotation_value           = thriftEncodeVal annval
+                    , binaryAnnotation_value           = annval
                     , binaryAnnotation_annotation_type = anntyp
                     , binaryAnnotation_host            = Just loc
                     }
@@ -134,12 +134,12 @@ thriftEncodeSpans
 thriftEncodeVal :: ThriftVal -> Lazy.ByteString
 thriftEncodeVal = Thrift.serializeVal (BinaryProtocol EmptyTransport)
 
-toThriftTag :: TagVal -> (Thrift.AnnotationType, ThriftVal)
-toThriftTag (BoolT   v) = (Thrift.BOOL, TBool v)
-toThriftTag (StringT v) = (Thrift.STRING, TString (view (lazy . to encodeUtf8) v))
-toThriftTag (IntT    v) = (Thrift.I64, TI64 v)
-toThriftTag (DoubleT v) = (Thrift.DOUBLE, TDouble v)
-toThriftTag (BinaryT v) = (Thrift.BYTES, TString v)
+toThriftTag :: TagVal -> (Thrift.AnnotationType, Lazy.ByteString)
+toThriftTag (BoolT   v) = (Thrift.BOOL, if v then "1" else "0")
+toThriftTag (StringT v) = (Thrift.STRING, view (lazy . to encodeUtf8) v)
+toThriftTag (IntT    v) = (Thrift.I64, toLazyByteString . int64BE $ v)
+toThriftTag (DoubleT v) = (Thrift.DOUBLE, toLazyByteString . doubleBE $ v)
+toThriftTag (BinaryT v) = (Thrift.BYTES, v)
 
 toThriftEndpoint :: Endpoint -> Thrift.Endpoint
 toThriftEndpoint Endpoint{..} = Thrift.Endpoint
