@@ -90,10 +90,7 @@ import           Data.Monoid                 (First)
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
-import           Data.Text.Lazy.Builder      (toLazyText)
-import qualified Data.Text.Lazy.Builder.Int  as TB
 import qualified Data.Text.Lazy.Encoding     as Lazy
-import qualified Data.Text.Read              as Text
 import           Data.Word                   (Word8)
 import           Network.HTTP.Types
 import           OpenTracing.Types
@@ -252,20 +249,10 @@ _HttpMethod = prism' ((HttpMethodKey,) . StringT . decodeUtf8) $ \case
 pattern HttpMethod v <- (preview _HttpMethod -> Just v) where
     HttpMethod v = review _HttpMethod v
 
--- nb. this is supposedly an integer value, but jaeger expects a string
 _HttpStatusCode :: Prism' Tag Status
-_HttpStatusCode = prism' fromStatus toStatus
-  where
-    fromStatus = (HttpStatusCodeKey,)
-               . StringT . view strict . toLazyText
-               . TB.decimal . statusCode
-
-    toStatus   = \case
-        (k, StringT x) | k == HttpStatusCodeKey ->
-              either (const Nothing) (Just . toEnum . fst)
-            . Text.decimal
-            $ x
-        _ -> Nothing
+_HttpStatusCode = prism' ((HttpStatusCodeKey,) . IntT . fromIntegral . statusCode) $ \case
+    (k, IntT x) | k == HttpStatusCodeKey -> Just . toEnum . fromIntegral $ x
+    _ -> Nothing
 
 pattern HttpStatusCode v <- (preview _HttpStatusCode -> Just v) where
     HttpStatusCode v = review _HttpStatusCode v

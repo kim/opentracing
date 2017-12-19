@@ -9,15 +9,17 @@ module OpenTracing.Jaeger.Thrift
 where
 
 import           Control.Lens
-import           Data.Bool         (bool)
+import           Data.Bool                  (bool)
 import           Data.Foldable
-import           Data.Int          (Int64)
-import           Data.Text         (Text)
+import           Data.Int                   (Int64)
+import           Data.Text                  (Text)
+import           Data.Text.Lazy.Builder     (toLazyText)
+import           Data.Text.Lazy.Builder.Int (decimal)
 import           Data.Text.Lens
-import           Data.Vector       (Vector)
-import qualified Data.Vector       as Vector
-import           Data.Vector.Lens  (vector)
-import           GHC.Stack         (prettyCallStack)
+import           Data.Vector                (Vector)
+import qualified Data.Vector                as Vector
+import           Data.Vector.Lens           (vector)
+import           GHC.Stack                  (prettyCallStack)
 import           Jaeger_Types
     ( Batch (..)
     , Log (..)
@@ -26,12 +28,12 @@ import           Jaeger_Types
     , SpanRef (..)
     , Tag (..)
     )
-import qualified Jaeger_Types      as Thrift
+import qualified Jaeger_Types               as Thrift
 import           OpenTracing.Log
 import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Time
-import           OpenTracing.Types (TraceID (..))
+import           OpenTracing.Types          (TraceID (..))
 
 
 toThriftSpan :: FinishedSpan -> Thrift.Span
@@ -79,6 +81,13 @@ toThriftTags :: Tags -> Vector Thrift.Tag
 toThriftTags = ifoldMap (\k v -> Vector.singleton (toThriftTag k v)) . fromTags
 
 toThriftTag :: Text -> TagVal -> Thrift.Tag
+-- acc. to https://github.com/opentracing/specification/blob/8d634bc7e3e73050f6ac1006858cddac8d9e0abe/semantic_conventions.yaml
+-- "http.status_code" is supposed to be integer-valued. Jaeger, however, drops
+-- the value (nb. _not_ the tag key) unless it is a string.
+toThriftTag HttpStatusCodeKey (IntT v) = Thrift.default_Tag
+    { tag_key  = view lazy HttpStatusCodeKey
+    , tag_vStr = Just . toLazyText . decimal $ v
+    }
 toThriftTag k v =
     let t = Thrift.default_Tag { tag_key = view lazy k }
      in case v of
