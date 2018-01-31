@@ -1,8 +1,8 @@
 _include: !include '../share/package.yaml'
 
-name: opentracing-zipkin
+name: opentracing-zipkin-v1
 
-synopsis: Zipkin backend for OpenTracing
+synopsis: Zipkin V1 backend for OpenTracing
 
 <<: *common
 <<: *version
@@ -14,17 +14,15 @@ library:
     - gen-src
 
   exposed-modules:
-    - OpenTracing.Zipkin
-    - OpenTracing.Zipkin.HttpReporter
-    - OpenTracing.Zipkin.Thrift
-    - OpenTracing.Zipkin.Types
+    - OpenTracing.Zipkin.V1
+    - OpenTracing.Zipkin.V1.HttpReporter
+    - OpenTracing.Zipkin.V1.Thrift
 
   other-modules:
     - ZipkinCore_Consts
     - ZipkinCore_Types
 
   dependencies:
-    - aeson
     - base
     - bytestring
     - exceptions
@@ -33,8 +31,8 @@ library:
     - http-types
     - iproute
     - lens
-    - mwc-random
     - opentracing
+    - opentracing-zipkin-common
     - QuickCheck
     - text
     - thrift

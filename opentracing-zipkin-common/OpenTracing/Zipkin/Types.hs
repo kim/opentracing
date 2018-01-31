@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -5,6 +6,8 @@
 
 module OpenTracing.Zipkin.Types
     ( Endpoint (..)
+
+    , defaultZipkinAddr
     )
 where
 
@@ -30,3 +33,6 @@ instance ToJSON Endpoint where
         , pair "ipv6" . toEncoding  <$> ipv6
         , pair "port" . toEncoding  <$> port
         ]
+
+defaultZipkinAddr :: Addr 'HTTP
+defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False

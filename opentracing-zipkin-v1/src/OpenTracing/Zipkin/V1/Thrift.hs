@@ -4,7 +4,9 @@
 {-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE ViewPatterns      #-}
 
-module OpenTracing.Zipkin.Thrift
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
+
+module OpenTracing.Zipkin.V1.Thrift
     ( toThriftSpan
 
     , thriftEncodeSpan

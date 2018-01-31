@@ -1,0 +1,32 @@
+_include: !include '../share/package.yaml'
+
+name: opentracing-zipkin-v2
+
+synopsis: Zipkin V2 backend for OpenTracing
+
+<<: *common
+<<: *version
+<<: *options
+
+library:
+  exposed-modules:
+    - OpenTracing.Zipkin.V2
+    - OpenTracing.Zipkin.V2.HttpReporter
+
+  dependencies:
+    - aeson
+    - base
+    - bytestring
+    - exceptions
+    - hashable
+    - http-client
+    - http-types
+    - iproute
+    - lens
+    - opentracing
+    - opentracing-zipkin-common
+    - QuickCheck
+    - text
+    - thrift
+    - unordered-containers
+    - vector

@@ -7,9 +7,11 @@ packages:
 - opentracing-http-client
 - opentracing-jaeger
 - opentracing-wai
-- opentracing-zipkin
+- opentracing-zipkin-common
+- opentracing-zipkin-v1
+- opentracing-zipkin-v2
+allow-newer: true # required for thrift
 extra-deps:
 - thrift-0.10.0
 - optparse-applicative-0.14.0.0
-allow-newer: true # required for thrift
 resolver: lts-9.6

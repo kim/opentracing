@@ -10,19 +10,26 @@ module Backends
     )
 where
 
-import Control.Lens
-import Data.Semigroup         ((<>))
-import Data.Text              (Text)
-import OpenTracing
-import OpenTracing.CloudTrace
-import OpenTracing.Jaeger
-import OpenTracing.Standard
-import OpenTracing.Zipkin
-import Options.Applicative
+import           Control.Lens
+import           Data.Semigroup         ((<>))
+import           Data.Text              (Text)
+import           Network.HTTP.Client    (defaultManagerSettings, newManager)
+import           OpenTracing
+import           OpenTracing.CloudTrace
+import           OpenTracing.Jaeger
+import           OpenTracing.Standard
+import qualified OpenTracing.Zipkin.V1  as ZipkinV1
+import           OpenTracing.Zipkin.V2  (Endpoint (..))
+import qualified OpenTracing.Zipkin.V2  as ZipkinV2
+import           Options.Applicative
+
+
+data ZipkinAPI = V1 | V2
+    deriving (Eq, Show, Read)
 
 data Backend
     = Std
-    | Zipkin API
+    | Zipkin ZipkinAPI
     | JaegerAgent
     | JaegerCollector
     | CloudTrace ProjectId
@@ -81,8 +88,12 @@ class HasServiceName a where
 
 instance HasServiceName JaegerAgentOptions     where srvName = jaoServiceName
 instance HasServiceName JaegerCollectorOptions where srvName = jcoServiceName
-instance HasServiceName ZipkinOptions          where
-    srvName = zoLocalEndpoint . lens serviceName (\s a -> s { serviceName = a })
+instance HasServiceName ZipkinV1.ZipkinOptions where
+    srvName = ZipkinV1.zoLocalEndpoint
+            . lens serviceName (\s a -> s { serviceName = a })
+instance HasServiceName ZipkinV2.ZipkinOptions where
+    srvName = ZipkinV2.zoLocalEndpoint
+            . lens serviceName (\s a -> s { serviceName = a })
 
 
 withBackend
@@ -109,16 +120,27 @@ withBackend be cfg f = do
             withJaegerCollector (cfg opts) $ \j ->
                 f std { traceReport = jaegerCollectorReporter j }
 
-        Zipkin api -> do
+        Zipkin V1 -> do
             mgr <- newManager defaultManagerSettings
-            let opts = zipkinOptions mgr api Endpoint
+            let opts = ZipkinV1.zipkinOptions mgr Endpoint
                      { serviceName = "zipkin-example"
                      , ipv4        = read "127.0.0.1"
                      , ipv6        = Nothing
                      , port        = Nothing
                      }
-            withZipkin (cfg opts) $ \z ->
-                f std { traceReport = zipkinHttpReporter z }
+            ZipkinV1.withZipkin (cfg opts) $ \z ->
+                f std { traceReport = ZipkinV1.zipkinHttpReporter z }
+
+        Zipkin V2 -> do
+            mgr <- newManager defaultManagerSettings
+            let opts = ZipkinV2.zipkinOptions mgr Endpoint
+                     { serviceName = "zipkin-example"
+                     , ipv4        = read "127.0.0.1"
+                     , ipv6        = Nothing
+                     , port        = Nothing
+                     }
+            ZipkinV2.withZipkin (cfg opts) $ \z ->
+                f std { traceReport = ZipkinV2.zipkinHttpReporter z }
 
         CloudTrace pid -> do
             opt <- simpleCloudTraceOptions pid Nothing

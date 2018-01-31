@@ -6,17 +6,14 @@
 {-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 
-module OpenTracing.Zipkin.HttpReporter
+module OpenTracing.Zipkin.V2.HttpReporter
     ( ZipkinOptions
     , zipkinOptions
     , zoManager
-    , zoApiVersion
     , zoLocalEndpoint
     , zoAddr
     , zoLogfmt
     , zoErrorLog
-
-    , API(..)
 
     , defaultZipkinAddr
 
@@ -34,17 +31,17 @@ module OpenTracing.Zipkin.HttpReporter
     )
 where
 
-import Control.Lens              hiding (Context)
-import Control.Monad             (unless)
+import Control.Lens             hiding (Context)
+import Control.Monad            (unless)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Data.Aeson                hiding (Error)
+import Data.Aeson               hiding (Error)
 import Data.Aeson.Encoding
 import Data.ByteString.Builder
-import Data.Maybe                (catMaybes)
+import Data.Maybe               (catMaybes)
 import Data.Monoid
-import Data.Text.Lazy.Encoding   (decodeUtf8)
-import Network.HTTP.Client       hiding (port)
+import Data.Text.Lazy.Encoding  (decodeUtf8)
+import Network.HTTP.Client      hiding (port)
 import Network.HTTP.Types
 import OpenTracing.Log
 import OpenTracing.Reporting
@@ -52,18 +49,13 @@ import OpenTracing.Span
 import OpenTracing.Tags
 import OpenTracing.Time
 import OpenTracing.Types
-import OpenTracing.Zipkin.Thrift
 import OpenTracing.Zipkin.Types
 
-
-data API = V1 | V2
-    deriving (Show, Read)
 
 newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 
 data ZipkinOptions = ZipkinOptions
     { _zoManager       :: Manager
-    , _zoApiVersion    :: API
     , _zoLocalEndpoint :: Endpoint
     , _zoAddr          :: Addr 'HTTP
     , _zoLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
@@ -72,21 +64,17 @@ data ZipkinOptions = ZipkinOptions
 
 makeLenses ''ZipkinOptions
 
-zipkinOptions :: Manager -> API -> Endpoint -> ZipkinOptions
-zipkinOptions mgr api loc = ZipkinOptions
+zipkinOptions :: Manager -> Endpoint -> ZipkinOptions
+zipkinOptions mgr loc = ZipkinOptions
     { _zoManager       = mgr
-    , _zoApiVersion    = api
     , _zoLocalEndpoint = loc
     , _zoAddr          = defaultZipkinAddr
     , _zoLogfmt        = jsonMap
     , _zoErrorLog      = defaultErrorLog
     }
 
-defaultZipkinAddr :: Addr 'HTTP
-defaultZipkinAddr = HTTPAddr "127.0.0.1" 9411 False
-
 newZipkin :: ZipkinOptions -> IO Zipkin
-newZipkin opts@ZipkinOptions{_zoErrorLog=errlog,_zoApiVersion} = do
+newZipkin opts@ZipkinOptions{_zoErrorLog=errlog} = do
     rq <- mkReq
     fmap Zipkin
         . newBatchEnv
@@ -94,23 +82,18 @@ newZipkin opts@ZipkinOptions{_zoErrorLog=errlog,_zoApiVersion} = do
         $ reporter opts rq
   where
     mkReq = do
-        let rqBase = "POST http://"
-                   <> view (zoAddr . addrHostName) opts
-                   <> ":"
-                   <> show (view (zoAddr . addrPort) opts)
-        case _zoApiVersion of
-            V1 -> do
-                rq <- parseRequest $ rqBase <> "/api/v1/spans"
-                return rq
-                    { requestHeaders = [(hContentType, "application/x-thrift")]
-                    , secure         = view (zoAddr . addrSecure) opts
-                    }
-            V2 -> do
-                rq <- parseRequest $ rqBase <> "/api/v2/spans"
-                return rq
-                    { requestHeaders = [(hContentType, "application/json")]
-                    , secure         = view (zoAddr . addrSecure) opts
-                    }
+        rq <- parseRequest rqBase
+        return rq
+            { requestHeaders = [(hContentType, "application/json")]
+            , secure         = view (zoAddr . addrSecure) opts
+            }
+
+    rqBase =
+           "POST http://"
+        <> view (zoAddr . addrHostName) opts
+        <> ":"
+        <> show (view (zoAddr . addrPort) opts)
+        <> "/api/v2/spans"
 
 closeZipkin :: Zipkin -> IO ()
 closeZipkin = closeBatchEnv . fromZipkin
@@ -136,11 +119,10 @@ reporter ZipkinOptions{..} rq spans = do
                     <> intDec (statusCode rs)
                     <> char8 '\n'
   where
-    body = RequestBodyLBS $ case _zoApiVersion of
-        V1 -> thriftEncodeSpans $
-                  map (toThriftSpan _zoLocalEndpoint _zoLogfmt) spans
-        V2 -> encodingToLazyByteString $
-                  list (spanE _zoLocalEndpoint _zoLogfmt) spans
+    body = RequestBodyLBS
+         . encodingToLazyByteString
+         . list (spanE _zoLocalEndpoint _zoLogfmt)
+         $ spans
 
 
 spanE :: Endpoint -> LogFieldsFormatter -> FinishedSpan -> Encoding

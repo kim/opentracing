@@ -19,11 +19,12 @@ library:
 
   dependencies:
     - base
+    - http-client
     - lens
     - opentracing-cloudtrace
     - opentracing-jaeger
-    - opentracing-zipkin
-    - opentracing-zipkin
+    - opentracing-zipkin-v1
+    - opentracing-zipkin-v2
     - text
 
 executables:
