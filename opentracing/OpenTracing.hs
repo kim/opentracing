@@ -91,14 +91,16 @@ traced__
 traced__ opt = void . traced opt
 
 traced'
-    :: ( MonadMask m
-       , MonadIO   m
+    :: ( MonadMask  m
+       , MonadIO    m
+       , HasTracing t
        )
-    => Tracing
+    => t
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m (Traced a)
-traced' Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
+traced' t opt f = mask $ \unmasked -> do
+    let Tracing{traceStart} = view tracing t
     span <- traceStart opt >>= liftIO . mkActive
     ret  <- unmasked (f span) `catchAny` \e -> do
                 liftIO $ do
@@ -112,6 +114,7 @@ traced' Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
     return Traced { tracedResult = ret, tracedSpan = fin }
   where
     report a = do
+        let Tracing{traceReport} = view tracing t
         span <- liftIO (readActiveSpan a) >>= traceFinish
         case view sampled span of
             Sampled    -> traceReport span
@@ -119,20 +122,22 @@ traced' Tracing{traceStart,traceReport} opt f = mask $ \unmasked -> do
         return span
 
 traced'_
-    :: ( MonadMask m
-       , MonadIO   m
+    :: ( MonadMask  m
+       , MonadIO    m
+       , HasTracing t
        )
-    => Tracing
+    => t
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m a
 traced'_ t opt f = tracedResult <$> traced' t opt f
 
 traced'__
-    :: ( MonadMask m
-       , MonadIO   m
+    :: ( MonadMask  m
+       , MonadIO    m
+       , HasTracing t
        )
-    => Tracing
+    => t
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m ()
