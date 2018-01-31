@@ -33,7 +33,6 @@ library:
     - case-insensitive
     - clock
     - containers
-    - http-client
     - http-types
     - iproute
     - lens
@@ -47,5 +46,4 @@ library:
     - time
     - transformers
     - unordered-containers
-    - vector
     - vinyl

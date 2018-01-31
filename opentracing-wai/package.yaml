@@ -14,7 +14,6 @@ library:
 
   dependencies:
     - base
-    - containers
     - lens
     - opentracing
     - text
