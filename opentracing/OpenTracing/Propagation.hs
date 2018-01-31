@@ -20,7 +20,6 @@ module OpenTracing.Propagation
 --  , Binary
 
     , Propagation
-    , Rec ((:&), RNil)
     , HasPropagation(..)
 
     , Carrier(..)
@@ -40,6 +39,11 @@ module OpenTracing.Propagation
     , _B3Headers
 
     , _Headers'
+
+    -- * Re-exports from 'Data.Vinyl'
+    , Rec ((:&), RNil)
+    , rappend, (<+>)
+    , rcast
     )
 where
 

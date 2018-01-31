@@ -22,7 +22,6 @@ import qualified Data.ByteString.Lazy.Char8         as BLC
 import           Data.Foldable
 import           Data.IORef
 import           Data.Semigroup
-import           Data.Vinyl
 import           Network.HTTP.Client
 import           Network.HTTP.Client.OpenTracing
 import           Network.HTTP.Types
