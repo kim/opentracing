@@ -1,0 +1,51 @@
+_include: !include '../share/package.yaml'
+
+name: opentracing
+
+synopsis: OpenTracing for Haskell
+
+<<: *common
+<<: *version
+<<: *options
+
+library:
+  exposed-modules:
+    - OpenTracing
+    - OpenTracing.Log
+    - OpenTracing.Propagation
+    - OpenTracing.Reporting
+    - OpenTracing.Reporting.Batch
+    - OpenTracing.Reporting.Pure
+    - OpenTracing.Reporting.Stdio
+    - OpenTracing.Sampling
+    - OpenTracing.Span
+    - OpenTracing.Standard
+    - OpenTracing.Tags
+    - OpenTracing.Time
+    - OpenTracing.Types
+
+  dependencies:
+    - aeson
+    - async
+    - base
+    - base64-bytestring
+    - bytestring
+    - case-insensitive
+    - clock
+    - containers
+    - http-client
+    - http-types
+    - iproute
+    - lens
+    - mtl
+    - mwc-random
+    - network
+    - safe-exceptions
+    - semigroups
+    - stm
+    - text
+    - time
+    - transformers
+    - unordered-containers
+    - vector
+    - vinyl

@@ -1,0 +1,25 @@
+- &common
+  author: Kim Altintop
+  maintainer: Kim Altintop <kim.altintop+opentracing@gmail.com>
+  copyright: Copyright (c) 2017-2018 Kim Altintop
+  license: Apache-2.0
+  license-file: LICENSE
+  homepage: https://github.com/kim/opentracing
+  bug-reports: https://github.com/kim/opentracing/issues
+  git: git@github.com:kim/opentracing.git
+  extra-source-files:
+    - CHANGELOG.md
+    - README.md
+
+- &version
+  version: 0.1.0.0
+
+- &options
+  ghc-options:
+    - -Wall
+    - -funbox-small-strict-fields
+    - -Wincomplete-uni-patterns
+    - -Wincomplete-record-updates
+    - -Wcompat
+    - -Wnoncanonical-monad-instances
+    - -Wnoncanonical-monadfail-instances

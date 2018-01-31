@@ -1,0 +1,64 @@
+_include: !include '../share/package.yaml'
+
+name: opentracing-examples
+
+synopsis: OpenTracing Examples
+
+<<: *common
+<<: *version
+<<: *options
+
+dependencies:
+  - opentracing
+  - optparse-applicative >= 0.14
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Backends
+
+  dependencies:
+    - base
+    - lens
+    - opentracing-cloudtrace
+    - opentracing-jaeger
+    - opentracing-zipkin
+    - opentracing-zipkin
+    - text
+
+executables:
+  opentracing-example-simple:
+    main: Simple.hs
+    dependencies:
+      - base
+      - opentracing-examples
+    ghc-options:
+      - -Wall
+      - -O2
+      - -threaded
+      - -rtsopts
+
+  opentracing-example-rpc:
+    main: RPC.hs
+    dependencies:
+      - async
+      - base
+      - bytestring
+      - exceptions
+      - http-client
+      - http-types
+      - lens
+      - managed
+      - mtl
+      - opentracing
+      - opentracing-examples
+      - opentracing-http-client
+      - opentracing-wai
+      - optparse-applicative
+      - wai
+      - warp
+    ghc-options:
+      - -Wall
+      - -O2
+      - -threaded
+      - -rtsopts

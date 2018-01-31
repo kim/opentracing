@@ -1,0 +1,21 @@
+_include: !include '../share/package.yaml'
+
+name: opentracing-http-client
+
+synopsis: OpenTracing instrumentation of http-client
+
+<<: *common
+<<: *version
+<<: *options
+
+library:
+  exposed-modules:
+    - Network.HTTP.Client.OpenTracing
+
+  dependencies:
+    - base
+    - http-client
+    - lens
+    - mtl
+    - opentracing
+    - text

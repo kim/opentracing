@@ -1,0 +1,48 @@
+_include: !include '../share/package.yaml'
+
+name: opentracing-jaeger
+
+synopsis: Jaeger backend for OpenTracing
+
+<<: *common
+<<: *version
+<<: *options
+
+library:
+  source-dirs:
+    - src
+    - gen-src
+
+  exposed-modules:
+    - OpenTracing.Jaeger
+    - OpenTracing.Jaeger.AgentReporter
+    - OpenTracing.Jaeger.CollectorReporter
+    - OpenTracing.Jaeger.Propagation
+    - OpenTracing.Jaeger.Thrift
+
+  other-modules:
+    - Jaeger_Consts
+    - Jaeger_Types
+    - Agent
+    - Agent_Client
+    - Agent_Types
+    - Agent_Iface
+    - Zipkincore_Types
+
+  dependencies:
+    - base
+    - bytestring
+    - exceptions
+    - hashable
+    - http-client
+    - http-types
+    - lens
+    - mtl
+    - network
+    - opentracing
+    - QuickCheck
+    - safe-exceptions
+    - text
+    - thrift
+    - unordered-containers
+    - vector
