@@ -71,7 +71,7 @@ import Data.Foldable
 import Data.HashMap.Strict    (HashMap, insert)
 import Data.IORef
 import Data.List.NonEmpty     (NonEmpty (..))
-import Data.Monoid
+import Data.Semigroup
 import Data.Text              (Text)
 import Data.Time.Clock
 import Data.Word
@@ -141,14 +141,16 @@ data SpanRefs = SpanRefs
     , _refPropagated    :: [Reference   ]
     }
 
-instance Monoid SpanRefs where
-    mempty = SpanRefs mempty mempty mempty
-
-    (SpanRefs par pre pro) `mappend` (SpanRefs par' pre' pro') = SpanRefs
+instance Semigroup SpanRefs where
+    (SpanRefs par pre pro) <> (SpanRefs par' pre' pro') = SpanRefs
         { _refActiveParents = par <> par'
         , _refPredecessors  = pre <> pre'
         , _refPropagated    = pro <> pro'
         }
+
+instance Monoid SpanRefs where
+    mempty  = SpanRefs mempty mempty mempty
+    mappend = (<>)
 
 childOf :: ActiveSpan -> SpanRefs
 childOf a = mempty { _refActiveParents = [a] }
