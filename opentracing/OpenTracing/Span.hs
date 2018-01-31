@@ -116,7 +116,7 @@ instance ToJSON Sampled where
     toEncoding = int . fromEnum
 
 _IsSampled :: Iso' Bool Sampled
-_IsSampled= iso (bool NotSampled Sampled) $ \case
+_IsSampled = iso (bool NotSampled Sampled) $ \case
     Sampled    -> True
     NotSampled -> False
 
