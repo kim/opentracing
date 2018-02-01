@@ -86,20 +86,28 @@ traced'
     -> SpanOpts
     -> (ActiveSpan -> m a)
     -> m (Traced a)
-traced' t opt f = mask $ \unmasked -> do
+traced' t opt f = do
     let Tracing{traceStart} = view tracing t
     span <- traceStart opt >>= liftIO . mkActive
-    ret  <- unmasked (f span) `catchAny` \e -> do
-                liftIO $ do
-                    now <- getCurrentTime
-                    modifyActiveSpan span $
-                          over spanTags (setTag (Error True))
-                        . over spanLogs (LogRecord now (ErrObj e :| []) :)
-                !_ <- report span
-                throwM e
+    ret  <- withException (f span) (onErr span)
     fin  <- report span
     return Traced { tracedResult = ret, tracedSpan = fin }
   where
+    -- /Note/: as per 'withException', we will be reporting any exception incl.
+    -- async ones. Exceptions thrown by 'report' will be ignored, and the one
+    -- from 'f' will be rethrown. Observe that 'withException' does _not_ run
+    -- the error handler under `uninterruptibleMask', unlike 'bracket' -- this
+    -- is a good thing, as we might be doing blocking I/O.
+    onErr :: MonadIO m => ActiveSpan -> SomeException -> m ()
+    onErr span e = do
+        liftIO $ do
+            now <- getCurrentTime
+            modifyActiveSpan span $
+                  over spanTags (setTag (Error True))
+                . over spanLogs (LogRecord now (ErrObj e :| []) :)
+        void $ report span
+
+    report :: MonadIO m => ActiveSpan -> m FinishedSpan
     report a = do
         let Tracing{traceReport} = view tracing t
         span <- liftIO (readActiveSpan a) >>= traceFinish
