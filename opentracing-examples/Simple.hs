@@ -20,8 +20,8 @@ main :: IO ()
 main = do
     be <- execParser options
     withBackend be id $ flip runTracing $
-        traced__ (spanOpts "hello" mempty          ) $ \parent ->
-        traced__ (spanOpts "world" (childOf parent)) $ \child ->
+        traced_ (spanOpts "hello" mempty          ) $ \parent ->
+        traced_ (spanOpts "world" (childOf parent)) $ \child ->
             liftIO $ do
                 putStrLn "doing some work..."
                 addLogRecord child (Message "doing some work")

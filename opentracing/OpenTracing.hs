@@ -20,9 +20,7 @@ module OpenTracing
     , traced'
 
     , traced_
-    , traced__
     , traced'_
-    , traced'__
     )
 where
 
@@ -79,17 +77,6 @@ traced_
     -> m a
 traced_ opt f = tracedResult <$> traced opt f
 
-traced__
-    :: ( HasTracing  r
-       , MonadReader r m
-       , MonadMask     m
-       , MonadIO       m
-       )
-    => SpanOpts
-    -> (ActiveSpan -> m a)
-    -> m ()
-traced__ opt = void . traced opt
-
 traced'
     :: ( MonadMask  m
        , MonadIO    m
@@ -131,14 +118,3 @@ traced'_
     -> (ActiveSpan -> m a)
     -> m a
 traced'_ t opt f = tracedResult <$> traced' t opt f
-
-traced'__
-    :: ( MonadMask  m
-       , MonadIO    m
-       , HasTracing t
-       )
-    => t
-    -> SpanOpts
-    -> (ActiveSpan -> m a)
-    -> m ()
-traced'__ t opt = void . traced' t opt
