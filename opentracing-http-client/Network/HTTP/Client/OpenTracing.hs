@@ -7,7 +7,7 @@ module Network.HTTP.Client.OpenTracing
     )
 where
 
-import           Control.Lens                 (over, view)
+import           Control.Lens                 (over, set, view)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.Semigroup               ((<>))
@@ -63,17 +63,14 @@ httpTraced'
 httpTraced' t p refs req mgr f = do
     sampled <- fmap (view ctxSampled . refCtx) . findParent <$> freezeRefs refs
 
-    let opt = SpanOpts
-            { spanOptOperation = decodeUtf8 $ path req
-            , spanOptRefs      = refs
-            , spanOptSampled   = sampled
-            , spanOptTags      =
-                [ HttpMethod  (method req)
-                , HttpUrl     (Text.pack . show $ getUri req)
-                , PeerAddress (decodeUtf8 (host req))
-                , SpanKind    RPCClient
-                ]
-            }
+    let opt = set spanOptSampled sampled
+            . set spanOptTags
+                  [ HttpMethod  (method req)
+                  , HttpUrl     (Text.pack . show $ getUri req)
+                  , PeerAddress (decodeUtf8 (host req))
+                  , SpanKind    RPCClient
+                  ]
+            $ spanOpts (decodeUtf8 (path req)) refs
 
     traced' t opt $ \span ->
         let mgr' = modMgr span

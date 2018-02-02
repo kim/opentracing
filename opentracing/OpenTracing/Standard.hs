@@ -52,13 +52,16 @@ stdReporter = stdoutReporter
 -- Internal
 
 start :: (MonadIO m, MonadReader StdEnv m) => SpanOpts -> m Span
-start so@SpanOpts{spanOptOperation,spanOptRefs,spanOptTags} = do
+start so = do
     ctx <- do
-        p <- findParent <$> liftIO (freezeRefs spanOptRefs)
+        p <- findParent <$> liftIO (freezeRefs (view spanOptRefs so))
         case p of
             Nothing -> freshContext so
             Just p' -> fromParent   (refCtx p')
-    newSpan ctx spanOptOperation spanOptRefs spanOptTags
+    newSpan ctx
+            (view spanOptOperation so)
+            (view spanOptRefs so)
+            (view spanOptTags so)
 
 newTraceID :: (MonadIO m, MonadReader StdEnv m) => m TraceID
 newTraceID = do
@@ -79,13 +82,14 @@ freshContext
        )
     => SpanOpts
     -> m SpanContext
-freshContext SpanOpts{spanOptOperation,spanOptSampled} = do
+freshContext so = do
     trid <- newTraceID
     spid <- newSpanID
     smpl <- view envSampler
 
-    sampled' <- case spanOptSampled of
-        Nothing -> view _IsSampled <$> runSampler smpl trid spanOptOperation
+    sampled' <- case view spanOptSampled so of
+        Nothing -> view _IsSampled
+               <$> runSampler smpl trid (view spanOptOperation so)
         Just s  -> pure s
 
     return SpanContext

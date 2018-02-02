@@ -40,8 +40,12 @@ module OpenTracing.Span
     , spanLogs
     , spanDuration
 
-    , SpanOpts(..)
+    , SpanOpts
     , spanOpts
+    , spanOptOperation
+    , spanOptRefs
+    , spanOptTags
+    , spanOptSampled
 
     , Reference(..)
     , findParent
@@ -166,20 +170,20 @@ freezeRefs SpanRefs{..} = do
 
 
 data SpanOpts = SpanOpts
-    { spanOptOperation :: Text
-    , spanOptRefs      :: SpanRefs
-    , spanOptTags      :: [Tag]
-    , spanOptSampled   :: Maybe Sampled
+    { _spanOptOperation :: Text
+    , _spanOptRefs      :: SpanRefs
+    , _spanOptTags      :: [Tag]
+    , _spanOptSampled   :: Maybe Sampled
     -- ^ Force 'Span' to be sampled (or not).
     -- 'Nothing' denotes leave decision to 'Sampler' (the default)
     }
 
 spanOpts :: Text -> SpanRefs -> SpanOpts
 spanOpts op refs = SpanOpts
-    { spanOptOperation = op
-    , spanOptRefs      = refs
-    , spanOptTags      = mempty
-    , spanOptSampled   = Nothing
+    { _spanOptOperation = op
+    , _spanOptRefs      = refs
+    , _spanOptTags      = mempty
+    , _spanOptSampled   = Nothing
     }
 
 data Span = Span
@@ -249,6 +253,7 @@ traceFinish s = do
         }
 
 makeLenses ''SpanContext
+makeLenses ''SpanOpts
 makeLenses ''Span
 makeLenses ''FinishedSpan
 makeLenses ''SpanRefs

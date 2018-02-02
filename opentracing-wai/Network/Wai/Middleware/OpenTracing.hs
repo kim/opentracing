@@ -29,20 +29,17 @@ opentracing
     -> Application
 opentracing t p app req respond = do
     let ctx = traceExtract p (requestHeaders req)
-    let opt = SpanOpts
-            { spanOptOperation = Text.intercalate "/" (pathInfo req)
-            , spanOptRefs      = (\x -> set refPropagated x mempty)
-                               . maybeToList
-                               . fmap ChildOf
-                               $ ctx
-            , spanOptSampled   = view ctxSampled <$> ctx
-            , spanOptTags      =
-                [ HttpMethod  (requestMethod req)
-                , HttpUrl     (decodeUtf8 url)
-                , PeerAddress (Text.pack (show (remoteHost req))) -- not so great
-                , SpanKind    RPCServer
-                ]
-            }
+    let opt = let name = Text.intercalate "/" (pathInfo req)
+                  refs = (\x -> set refPropagated x mempty)
+                       . maybeToList . fmap ChildOf $ ctx
+               in set spanOptSampled (view ctxSampled <$> ctx)
+                . set spanOptTags
+                      [ HttpMethod  (requestMethod req)
+                      , HttpUrl     (decodeUtf8 url)
+                      , PeerAddress (Text.pack (show (remoteHost req))) -- not so great
+                      , SpanKind    RPCServer
+                      ]
+                $ spanOpts name refs
 
     fmap tracedResult . traced' t opt $ \span ->
         app span req                  $ \res  -> do
