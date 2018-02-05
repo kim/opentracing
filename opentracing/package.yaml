@@ -22,6 +22,7 @@ library:
     - OpenTracing.Standard
     - OpenTracing.Tags
     - OpenTracing.Time
+    - OpenTracing.Tracer
     - OpenTracing.Types
 
   dependencies:

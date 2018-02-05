@@ -99,12 +99,12 @@ instance HasServiceName ZipkinV2.ZipkinOptions where
 withBackend
     :: Backend
     -> (forall cfg. HasServiceName cfg => cfg -> cfg)
-    -> (Tracing -> IO a)
+    -> (Tracer -> IO a)
     -> IO a
 withBackend be cfg f = do
     std <- do
         env <- newStdEnv (constSampler True)
-        return $ Tracing (stdTracer env) stdReporter
+        return $ Tracer (stdTracer env) stdReporter
 
     case be of
         Std -> f std
@@ -112,13 +112,13 @@ withBackend be cfg f = do
         JaegerAgent -> do
             let opts = jaegerAgentOptions "jaeger-agent-example"
             withJaegerAgent (cfg opts) $ \j ->
-                f std { traceReport = jaegerAgentReporter j }
+                f std { tracerReport = jaegerAgentReporter j }
 
         JaegerCollector -> do
             mgr <- newManager defaultManagerSettings
             let opts = jaegerCollectorOptions mgr "jaeger-collector-example"
             withJaegerCollector (cfg opts) $ \j ->
-                f std { traceReport = jaegerCollectorReporter j }
+                f std { tracerReport = jaegerCollectorReporter j }
 
         Zipkin V1 -> do
             mgr <- newManager defaultManagerSettings
@@ -129,7 +129,7 @@ withBackend be cfg f = do
                      , port        = Nothing
                      }
             ZipkinV1.withZipkin (cfg opts) $ \z ->
-                f std { traceReport = ZipkinV1.zipkinHttpReporter z }
+                f std { tracerReport = ZipkinV1.zipkinHttpReporter z }
 
         Zipkin V2 -> do
             mgr <- newManager defaultManagerSettings
@@ -140,9 +140,9 @@ withBackend be cfg f = do
                      , port        = Nothing
                      }
             ZipkinV2.withZipkin (cfg opts) $ \z ->
-                f std { traceReport = ZipkinV2.zipkinHttpReporter z }
+                f std { tracerReport = ZipkinV2.zipkinHttpReporter z }
 
         CloudTrace pid -> do
             opt <- simpleCloudTraceOptions pid Nothing
             withCloudTrace opt $ \c ->
-                f std { traceReport = cloudTraceReporter c }
+                f std { tracerReport = cloudTraceReporter c }

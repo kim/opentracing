@@ -7,6 +7,7 @@ module Network.HTTP.Client.OpenTracing
     )
 where
 
+import           Control.Applicative
 import           Control.Lens                 (over, set, view)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
@@ -20,6 +21,8 @@ import           Network.HTTP.Client.Internal
     , responseStatus
     )
 import           OpenTracing                  hiding (sampled)
+import qualified OpenTracing.Propagation      as Propagation
+import qualified OpenTracing.Tracer           as Tracer
 import           Prelude                      hiding (span)
 
 -- |
@@ -36,11 +39,9 @@ import           Prelude                      hiding (span)
 -- :}
 --
 httpTraced
-    :: ( HasCarrier     Headers p
-       , HasPropagation r       p
-       , HasTracing     r
-       , MonadReader    r m
-       , MonadIO          m
+    :: ( HasCarrier       Headers p
+       , MonadOpenTracing r       p m
+       , MonadIO                    m
        )
     => SpanRefs
     -> Request
@@ -48,12 +49,12 @@ httpTraced
     -> (Request -> Manager -> IO a)
     -> m (Traced a)
 httpTraced refs req mgr f = do
-    (t,p) <- (,) <$> view tracing <*> view propagation
+    (t,p) <- liftA2 (,) (view tracer) (view propagation)
     liftIO $ httpTraced' t p refs req mgr f
 
 httpTraced'
     :: HasCarrier Headers p
-    => Tracing
+    => Tracer
     -> Propagation        p
     -> SpanRefs
     -> Request
@@ -72,13 +73,13 @@ httpTraced' t p refs req mgr f = do
                   ]
             $ spanOpts (decodeUtf8 (path req)) refs
 
-    traced' t opt $ \span ->
+    Tracer.traced t opt $ \span ->
         let mgr' = modMgr span
          in f req { requestManagerOverride = Just mgr' } mgr'
   where
     modMgr span = mgr
         { mModifyRequest  = \rq ->
-            inject rq . view spanContext <$> readActiveSpan span
+            inj rq . view spanContext <$> readActiveSpan span
 
         , mModifyResponse = \rs -> do
             modifyActiveSpan span $
@@ -86,6 +87,6 @@ httpTraced' t p refs req mgr f = do
             return rs
         }
 
-    inject rq ctx = rq
-        { requestHeaders = requestHeaders rq <> traceInject p ctx
+    inj rq ctx = rq
+        { requestHeaders = requestHeaders rq <> Propagation.inject p ctx
         }

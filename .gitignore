@@ -2,3 +2,4 @@ dist*
 .stack-work
 *.jar
 *.cabal
+tags

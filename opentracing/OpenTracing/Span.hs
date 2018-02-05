@@ -30,7 +30,7 @@ module OpenTracing.Span
     , getBaggageItem
 
     , FinishedSpan
-    , traceFinish
+    , spanFinish
 
     , spanContext
     , spanOperation
@@ -66,6 +66,7 @@ module OpenTracing.Span
     )
 where
 
+import Control.Applicative
 import Control.Lens           hiding (op, pre, (.=))
 import Control.Monad.IO.Class
 import Data.Aeson             (ToJSON (..), object, (.=))
@@ -239,9 +240,9 @@ data FinishedSpan = FinishedSpan
     , _fLogs      :: [LogRecord]
     }
 
-traceFinish :: MonadIO m => Span -> m FinishedSpan
-traceFinish s = do
-    (t,refs) <- liftIO $ (,) <$> getCurrentTime <*> freezeRefs (_sRefs s)
+spanFinish :: MonadIO m => Span -> m FinishedSpan
+spanFinish s = do
+    (t,refs) <- liftIO $ liftA2 (,) getCurrentTime (freezeRefs (_sRefs s))
     pure FinishedSpan
         { _fContext   = _sContext s
         , _fOperation = _sOperation s

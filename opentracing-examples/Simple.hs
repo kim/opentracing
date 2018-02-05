@@ -19,7 +19,7 @@ options = info (parseBackend <**> helper)
 main :: IO ()
 main = do
     be <- execParser options
-    withBackend be id $ flip runTracing $
+    withBackend be id $ flip runTracer $
         traced_ (spanOpts "hello" mempty          ) $ \parent ->
         traced_ (spanOpts "world" (childOf parent)) $ \child ->
             liftIO $ do

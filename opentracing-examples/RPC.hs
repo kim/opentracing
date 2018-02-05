@@ -39,12 +39,12 @@ import           Prelude                            hiding (span)
 
 
 data Env = Env
-    { envTracing     :: Tracing
+    { envTracer      :: Tracer
     , envPropagation :: Propagation '[Headers]
     , envManager     :: Manager
     }
 
-instance HasTracing     Env            where tracing     = to envTracing
+instance HasTracer      Env            where tracer      = to envTracer
 instance HasPropagation Env '[Headers] where propagation = to envPropagation
 
 
@@ -79,13 +79,13 @@ main = do
         liftIO $ warpTraced env p (m env)
 
     warpTraced Env{..} port =
-        Warp.run port . opentracing envTracing envPropagation
+        Warp.run port . opentracing envTracer envPropagation
 
-    mkTracing be srv = managed $ withBackend be (set srvName srv)
+    mkTracer be  srv = managed $ withBackend be (set srvName srv)
     mkEnv be mgr srv = do
-        tr <- mkTracing be srv
+        tr <- mkTracer be srv
         pure Env
-            { envTracing     = tr
+            { envTracer      = tr
             , envPropagation = rcast otPropagation
             , envManager     = mgr
             }

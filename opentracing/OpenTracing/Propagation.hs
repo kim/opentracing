@@ -27,8 +27,8 @@ module OpenTracing.Propagation
     , HasCarriers
     , carrier
 
-    , traceInject
-    , traceExtract
+    , inject
+    , extract
 
     , otPropagation
     , b3Propagation
@@ -90,11 +90,11 @@ carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
 carrier c = fromCarrier . view (rlens c)
 
 
-traceInject :: forall c p. HasCarrier c p => Propagation p -> SpanContext -> c
-traceInject p = review (carrier (Proxy @c) p)
+inject :: forall c p. HasCarrier c p => Propagation p -> SpanContext -> c
+inject p = review (carrier (Proxy @c) p)
 
-traceExtract :: forall c p. HasCarrier c p => Propagation p -> c -> Maybe SpanContext
-traceExtract p = preview (carrier (Proxy @c) p)
+extract :: forall c p. HasCarrier c p => Propagation p -> c -> Maybe SpanContext
+extract p = preview (carrier (Proxy @c) p)
 
 
 otPropagation :: Propagation '[TextMap, Headers]
