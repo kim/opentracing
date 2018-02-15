@@ -25,6 +25,8 @@ module OpenTracing
     , traced_
     , startSpan
     , finishSpan
+    , extract
+    , inject
     )
 where
 
@@ -100,7 +102,7 @@ inject ctx = flip Propagation.inject ctx <$> view propagation
 extract
     :: forall c r p m.
        ( MonadPropagation r p m
-       , HasCarrier      c p
+       , HasCarrier       c p
        )
     => c
     -> m (Maybe SpanContext)
