@@ -41,7 +41,7 @@ _JaegerTextMap = prism' fromCtx toCtx
         $ HashMap.lookup "uber-trace-id" m >>= preview _UberTraceId
 
 _JaegerHeaders :: Prism' Headers SpanContext
-_JaegerHeaders = _Headers' _JaegerTextMap
+_JaegerHeaders = _HeadersTextMap . _JaegerTextMap
 
 _UberTraceId :: Prism' Text SpanContext
 _UberTraceId = prism' fromCtx toCtx

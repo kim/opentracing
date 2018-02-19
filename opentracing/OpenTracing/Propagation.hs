@@ -38,7 +38,7 @@ module OpenTracing.Propagation
     , _B3TextMap
     , _B3Headers
 
-    , _Headers'
+    , _HeadersTextMap
 
     -- * Re-exports from 'Data.Vinyl'
     , Rec ((:&), RNil)
@@ -47,23 +47,25 @@ module OpenTracing.Propagation
     )
 where
 
-import           Control.Applicative  ((<|>))
+import           Control.Applicative     ((<|>))
 import           Control.Lens
-import           Data.Bool            (bool)
-import qualified Data.CaseInsensitive as CI
-import           Data.HashMap.Strict  (HashMap)
-import qualified Data.HashMap.Strict  as HashMap
-import           Data.Maybe           (catMaybes)
+import           Data.Bool               (bool)
+import           Data.ByteString.Builder (toLazyByteString)
+import qualified Data.CaseInsensitive    as CI
+import           Data.HashMap.Strict     (HashMap)
+import qualified Data.HashMap.Strict     as HashMap
+import           Data.Maybe              (catMaybes)
 import           Data.Monoid
 import           Data.Proxy
-import           Data.Text            (Text, isPrefixOf, toLower)
-import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
-import qualified Data.Text.Read       as Text
+import           Data.Text               (Text, isPrefixOf, toLower)
+import           Data.Text.Encoding      (decodeUtf8, encodeUtf8)
+import qualified Data.Text.Read          as Text
 import           Data.Vinyl
 import           Data.Word
-import           Network.HTTP.Types   (Header)
+import           Network.HTTP.Types      (Header)
 import           OpenTracing.Span
 import           OpenTracing.Types
+import           URI.ByteString          (urlDecodeQuery, urlEncodeQuery)
 
 
 type TextMap = HashMap Text Text
@@ -122,7 +124,7 @@ _OTTextMap = prism' fromCtx toCtx
 
 
 _OTHeaders :: Prism' Headers SpanContext
-_OTHeaders = _Headers' _OTTextMap
+_OTHeaders = _HeadersTextMap . _OTTextMap
 
 _OTSampled :: Prism' Text Sampled
 _OTSampled = prism' enc dec
@@ -160,18 +162,23 @@ _B3TextMap = prism' fromCtx toCtx
         _   -> Nothing
 
 _B3Headers :: Prism' Headers SpanContext
-_B3Headers = _Headers' _B3TextMap
+_B3Headers = _HeadersTextMap . _B3TextMap
 
--- XXX: ensure headers are actually compliant with RFC 7230, Section 3.2.4
-_Headers' :: Prism' TextMap SpanContext -> Prism' Headers SpanContext
-_Headers' _TextMap = prism' fromCtx toCtx
+-- | Convert between a 'TextMap' and 'Headers'
+--
+-- Header field values are URL-encoded when converting from 'TextMap' to
+-- 'Headers', and URL-decoded when converting the other way.
+--
+-- Note: validity of header fields is not checked (RFC 7230, 3.2.4)
+_HeadersTextMap :: Iso' Headers TextMap
+_HeadersTextMap = iso toTextMap toHeaders
   where
-    fromCtx
-        = map (bimap (CI.mk . encodeUtf8) encodeUtf8)
+    toHeaders
+        = map (bimap (CI.mk . encodeUtf8)
+                     (view strict . toLazyByteString . urlEncodeQuery . encodeUtf8))
         . HashMap.toList
-        . review _TextMap
 
-    toCtx
-        = preview _TextMap
-        . HashMap.fromList
-        . map (bimap (toLower . decodeUtf8 . CI.original) decodeUtf8)
+    toTextMap
+        = HashMap.fromList
+        . map (bimap (toLower . decodeUtf8 . CI.original)
+                     (decodeUtf8 . urlDecodeQuery))

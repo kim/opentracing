@@ -47,4 +47,5 @@ library:
     - time
     - transformers
     - unordered-containers
+    - uri-bytestring
     - vinyl
