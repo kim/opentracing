@@ -1,6 +1,6 @@
 # OpenTracing for Haskell
 
-[OpenTracing](https://opentracing.io) is an attempt to define a common API to
+[OpenTracing](http://opentracing.io) is an attempt to define a common API to
 instrument code for
 [Dapper](https://research.google.com/pubs/pub36356.html)-style distributed
 tracing, abstracting over various implementations of this concept (such as
