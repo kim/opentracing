@@ -31,30 +31,22 @@ import qualified Agent_Client                   as Thrift
 import           Control.Exception.Safe
 import           Control.Lens                   (makeLenses, view)
 import           Control.Monad.IO.Class
-import           Control.Monad.Reader
 import           Data.ByteString.Builder
 import           Data.Semigroup
 import           Data.Text                      (Text)
 import qualified Data.Vector                    as Vector
 import qualified Jaeger_Types                   as Thrift
 import           Network.Socket
+import qualified Network.Socket.ByteString.Lazy as Net
 import           OpenTracing.Jaeger.Propagation (jaegerPropagation)
 import           OpenTracing.Jaeger.Thrift
 import           OpenTracing.Reporting          (defaultErrorLog)
 import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
-import           Prelude                        hiding (span)
-import           System.IO
-    ( BufferMode (..)
-    , Handle
-    , IOMode (..)
-    , hSetBinaryMode
-    , hSetBuffering
-    )
 import qualified Thrift
 import qualified Thrift.Protocol.Compact        as Thrift
-import           Thrift.Transport.Handle        ()
+import qualified Thrift.Transport.IOBuffer      as Thrift
 
 
 data JaegerAgent = JaegerAgent
@@ -63,8 +55,22 @@ data JaegerAgent = JaegerAgent
     , envTransport    :: AgentTransport
     }
 
-newtype AgentTransport = AgentTransport Handle
-    deriving Thrift.Transport
+data AgentTransport = AgentTransport
+    { transSock :: Socket
+    , transBuf  :: Thrift.WriteBuffer
+    }
+
+instance Thrift.Transport AgentTransport where
+    tIsOpen = isConnected . transSock
+    tWrite  = Thrift.writeBuf . transBuf
+
+    tFlush AgentTransport{..} =
+        Thrift.flushBuf transBuf >>= Net.sendAll transSock
+
+    tClose   = error "tClose undefined"
+    tRead    = error "tRead undefined"
+    tPeek    = error "tPeek undefined"
+    tReadAll = error "tReadAll undefined"
 
 data JaegerAgentOptions = JaegerAgentOptions
     { _jaoServiceName :: Text
@@ -112,18 +118,18 @@ openAgentTransport addr = do
                                     (Just . show . view addrPort $ addr)
     sock <- socket addrFamily addrSocketType addrProtocol
     connect sock addrAddress
-    hdl  <- socketToHandle sock ReadWriteMode
-    hSetBuffering  hdl NoBuffering -- MUST flush after every message!
-    hSetBinaryMode hdl True
-
-    return $ AgentTransport hdl
+    buf  <- Thrift.newWriteBuffer
+    return AgentTransport
+        { transSock = sock
+        , transBuf  = buf
+        }
 
 jaegerAgentReporter :: MonadIO m => JaegerAgent -> FinishedSpan -> m ()
 jaegerAgentReporter JaegerAgent{..} s = liftIO $ emit `catchAny` err
   where
     proto = Thrift.CompactProtocol envTransport
-    emit  = Thrift.emitBatch (undefined, proto)
-          $ toThriftBatch envLocalProcess (Vector.singleton s)
+    emit  = Thrift.emitBatch (undefined, proto) batch
+    batch = toThriftBatch envLocalProcess (Vector.singleton s)
     err e = envErrorLog $ shortByteString "Jaeger Agent Thrift error: "
                        <> string8 (show e)
                        <> char8 '\n'
