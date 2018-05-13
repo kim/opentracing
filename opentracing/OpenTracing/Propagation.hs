@@ -88,15 +88,35 @@ type HasCarrier  c  cs = c  ∈ cs
 type HasCarriers cs ds = cs ⊆ ds
 
 
-carrier :: HasCarrier c cs => proxy c -> Propagation cs -> Prism' c SpanContext
-carrier c = fromCarrier . view (rlens c)
+carrier
+    :: ( HasCarrier     c cs
+       , HasPropagation r cs
+       )
+    => proxy c
+    -> r
+    -> Prism' c SpanContext
+carrier c = fromCarrier . view (propagation . rlens c)
 
 
-inject :: forall c p. HasCarrier c p => Propagation p -> SpanContext -> c
-inject p = review (carrier (Proxy @c) p)
+inject
+    :: forall c r p.
+       ( HasCarrier     c p
+       , HasPropagation r p
+       )
+    => r
+    -> SpanContext
+    -> c
+inject r = review (carrier (Proxy @c) r)
 
-extract :: forall c p. HasCarrier c p => Propagation p -> c -> Maybe SpanContext
-extract p = preview (carrier (Proxy @c) p)
+extract
+    :: forall c r p.
+       ( HasCarrier     c p
+       , HasPropagation r p
+       )
+    => r
+    -> c
+    -> Maybe SpanContext
+extract r = preview (carrier (Proxy @c) r)
 
 
 otPropagation :: Propagation '[TextMap, Headers]
