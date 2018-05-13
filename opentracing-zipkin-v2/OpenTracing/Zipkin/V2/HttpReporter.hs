@@ -41,7 +41,7 @@ import Data.ByteString.Builder
 import Data.Maybe               (catMaybes)
 import Data.Monoid
 import Data.Text.Lazy.Encoding  (decodeUtf8)
-import Network.HTTP.Client      hiding (port)
+import Network.HTTP.Client
 import Network.HTTP.Types
 import OpenTracing.Log
 import OpenTracing.Reporting
