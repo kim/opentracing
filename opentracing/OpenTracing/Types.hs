@@ -28,7 +28,8 @@ import           Control.Lens
 import           Data.Aeson                 (ToJSON (..))
 import           Data.Aeson.Encoding
 import qualified Data.IP                    as IP
-import           Data.Monoid
+import           Data.Monoid                (Monoid)
+import           Data.Semigroup             (Semigroup, (<>))
 import           Data.Text                  (Text)
 import qualified Data.Text                  as Text
 import qualified Data.Text.Lazy.Builder     as TB
@@ -95,7 +96,7 @@ addrSecure f (HTTPAddr h p s) = (\s' -> HTTPAddr h p s') <$> f s
 
 
 newtype Hex = Hex { unHex :: Text }
-    deriving (Eq, Show, Monoid)
+    deriving (Eq, Show, Monoid, Semigroup)
 
 knownHex :: Text -> Hex
 knownHex = Hex
