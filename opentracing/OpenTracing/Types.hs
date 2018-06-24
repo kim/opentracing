@@ -27,13 +27,13 @@ where
 import           Control.Lens
 import           Data.Aeson                 (ToJSON (..))
 import           Data.Aeson.Encoding
+import           Data.ByteString.Builder    as B
 import qualified Data.IP                    as IP
 import           Data.Monoid                (Monoid)
 import           Data.Semigroup             (Semigroup, (<>))
 import           Data.Text                  (Text)
 import qualified Data.Text                  as Text
-import qualified Data.Text.Lazy.Builder     as TB
-import qualified Data.Text.Lazy.Builder.Int as TB
+import qualified Data.Text.Lazy.Encoding    as E
 import qualified Data.Text.Read             as TR
 import           Data.Word
 import           Network                    (HostName)
@@ -120,7 +120,7 @@ instance AsHex TraceID where
 instance AsHex Word64 where
     _Hex = prism' enc dec
       where
-        enc = Hex . view strict . TB.toLazyText . TB.hexadecimal
+        enc = Hex . view strict . E.decodeUtf8 . B.toLazyByteString . B.word64HexFixed
         dec = either (const Nothing) (pure . fst) . TR.hexadecimal . unHex
     {-# INLINE _Hex #-}
 
