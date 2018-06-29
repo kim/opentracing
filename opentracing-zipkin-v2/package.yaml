@@ -16,6 +16,7 @@ library:
   dependencies:
     - aeson
     - base
+    - base64-bytestring
     - bytestring
     - exceptions
     - http-client
