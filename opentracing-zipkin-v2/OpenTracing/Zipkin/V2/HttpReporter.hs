@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
@@ -39,8 +40,10 @@ import Data.Aeson               hiding (Error)
 import Data.Aeson.Encoding
 import Data.ByteString.Builder
 import Data.Maybe               (catMaybes)
+import Data.Map.Lens (toMapOf)
 import Data.Monoid
 import Data.Text.Lazy.Encoding  (decodeUtf8)
+import Data.Text.Strict.Lens    (packed, utf8)
 import Network.HTTP.Client
 import Network.HTTP.Types
 import OpenTracing.Log
@@ -50,7 +53,6 @@ import OpenTracing.Tags
 import OpenTracing.Time
 import OpenTracing.Types
 import OpenTracing.Zipkin.Types
-
 
 newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 
@@ -144,8 +146,15 @@ spanE loc logfmt s = pairs $
              (pair "remoteEndpoint")
              (view (spanTags . to remoteEndpoint) s)
     <> pair "annotations"    (list (logRecE logfmt) $ view spanLogs s)
-    <> pair "tags"           (toEncoding $ view spanTags s)
+    -- Zipkin V2 requires tag values to be strings
+    <> pair "tags"           (toEncoding . toMapOf (spanTags . to fromTags . ifolded . to tagToText) $ s)
     -- nb. references are lost, perhaps we should stick them into annotations?
+  where tagToText = \ case
+          BoolT b   -> view (to show . packed) b
+          StringT t -> t
+          IntT i    -> view (to show . packed) i
+          DoubleT d -> view (to show . packed) d
+          BinaryT b -> view (strict . utf8) b
 
 remoteEndpoint :: Tags -> Maybe Encoding
 remoteEndpoint ts = case fields of
