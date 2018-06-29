@@ -32,27 +32,28 @@ module OpenTracing.Zipkin.V2.HttpReporter
     )
 where
 
-import Control.Lens             hiding (Context)
-import Control.Monad            (unless)
-import Control.Monad.Catch
-import Control.Monad.IO.Class
-import Data.Aeson               hiding (Error)
-import Data.Aeson.Encoding
-import Data.ByteString.Builder
-import Data.Maybe               (catMaybes)
-import Data.Map.Lens (toMapOf)
-import Data.Monoid
-import Data.Text.Lazy.Encoding  (decodeUtf8)
-import Data.Text.Strict.Lens    (packed, utf8)
-import Network.HTTP.Client
-import Network.HTTP.Types
-import OpenTracing.Log
-import OpenTracing.Reporting
-import OpenTracing.Span
-import OpenTracing.Tags
-import OpenTracing.Time
-import OpenTracing.Types
-import OpenTracing.Zipkin.Types
+import           Control.Lens                hiding (Context)
+import           Control.Monad               (unless)
+import           Control.Monad.Catch
+import           Control.Monad.IO.Class
+import           Data.Aeson                  hiding (Error)
+import           Data.Aeson.Encoding
+import qualified Data.ByteString.Base64.Lazy as B64
+import           Data.ByteString.Builder
+import           Data.Map.Lens               (toMapOf)
+import           Data.Maybe                  (catMaybes)
+import           Data.Monoid
+import           Data.Text.Lazy.Encoding     (decodeUtf8)
+import           Data.Text.Strict.Lens       (packed, utf8)
+import           Network.HTTP.Client
+import           Network.HTTP.Types
+import           OpenTracing.Log
+import           OpenTracing.Reporting
+import           OpenTracing.Span
+import           OpenTracing.Tags
+import           OpenTracing.Time
+import           OpenTracing.Types
+import           OpenTracing.Zipkin.Types
 
 newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 
@@ -154,7 +155,7 @@ spanE loc logfmt s = pairs $
           StringT t -> t
           IntT i    -> view (to show . packed) i
           DoubleT d -> view (to show . packed) d
-          BinaryT b -> view (strict . utf8) b
+          BinaryT b -> view (to B64.encode . strict . utf8) b
 
 remoteEndpoint :: Tags -> Maybe Encoding
 remoteEndpoint ts = case fields of
