@@ -10,12 +10,7 @@ packages:
 - opentracing-zipkin-common
 - opentracing-zipkin-v1
 - opentracing-zipkin-v2
-- location:
-    git: git@github.com:apache/thrift.git
-    commit: 0d8da22dba430c379de04ff48e507e7277f4ea21
-    subdirs:
-      - lib/hs
-  extra-dep: true
 extra-deps:
+- thrift-0.12.0
 - optparse-applicative-0.14.0.0
 resolver: lts-9.21

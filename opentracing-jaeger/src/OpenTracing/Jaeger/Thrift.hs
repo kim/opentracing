@@ -63,6 +63,7 @@ toThriftSpan s = Thrift.Span
                          . Vector.fromList
                          . foldr' (\r acc -> toThriftLog r : acc) []
                          $ view spanLogs s
+    , span_incomplete    = Just False
     }
 
 toThriftSpanRef :: Reference -> Thrift.SpanRef
