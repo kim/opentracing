@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE CPP                    #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -95,7 +96,12 @@ carrier
     => proxy c
     -> r
     -> Prism' c SpanContext
-carrier c = fromCarrier . view (propagation . rlens c)
+carrier c =
+#if MIN_VERSION_vinyl(0,9,0)
+  fromCarrier . view (propagation . rlens)
+#else
+  fromCarrier . view (propagation . rlens c)
+#endif
 
 
 inject
