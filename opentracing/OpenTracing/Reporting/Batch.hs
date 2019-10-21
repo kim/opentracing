@@ -1,3 +1,10 @@
+{-|
+Module: OpenTracing.Reporting.Batch
+
+This module provides a trace reporter that groups recorded spans into batches
+before sending them to their destination in bulk.
+
+-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -40,14 +47,22 @@ import OpenTracing.Time
 import System.IO                (stderr)
 import System.Timeout
 
-
+-- | Options available to construct a batch reporter. Default options are
+-- available with `batchOptions`
 data BatchOptions = BatchOptions
     { _boptBatchSize  :: Word16
+    -- ^ The maximum number of elements to report in a batch. Default 100
     , _boptTimeoutSec :: Word
+    -- ^ The maximum time (in seconds) to wait while reporting a batch before erroring.
+    -- Default 5 seconds.
     , _boptReporter   :: [FinishedSpan] -> IO ()
+    -- ^ The function to call with the batch of spans. Has an upper bound on size equal
+    -- to _boptBatchSize. No default.
     , _boptErrorLog   :: Builder        -> IO ()
+    -- ^ What to do with errors. Default print to stderr.
     }
 
+-- | Default batch options which can be overridden via lenses.
 batchOptions :: ([FinishedSpan] -> IO ()) -> BatchOptions
 batchOptions f = BatchOptions
     { _boptBatchSize  = 100
@@ -56,25 +71,34 @@ batchOptions f = BatchOptions
     , _boptErrorLog   = defaultErrorLog
     }
 
+-- | An error logging function which prints to stderr.
 defaultErrorLog :: Builder -> IO ()
 defaultErrorLog = hPutBuilder stderr
 
 makeLenses ''BatchOptions
 
 
+-- | The environment of a batch reporter.
 data BatchEnv = BatchEnv
     { envQ   :: TQueue FinishedSpan
+    -- ^ The queue of spans to be reported
     , envRep :: Async ()
+    -- ^ Asynchronous consumer of the queue
     }
 
+-- | Create a new batch environment
 newBatchEnv :: BatchOptions -> IO BatchEnv
 newBatchEnv opt = do
     q <- newTQueueIO
     BatchEnv q <$> consumer opt q
 
+-- | Close a batch reporter, stop consuming any new spans. Any
+-- spans in the queue will be drained.
 closeBatchEnv :: BatchEnv -> IO ()
 closeBatchEnv = cancel . envRep
 
+-- | An implementation of `OpenTracing.Tracer.tracerReport` that batches the finished
+-- spans for transimission to their destination.
 batchReporter :: MonadIO m => BatchEnv -> FinishedSpan -> m ()
 batchReporter BatchEnv{envQ} = liftIO . atomically . writeTQueue envQ
 

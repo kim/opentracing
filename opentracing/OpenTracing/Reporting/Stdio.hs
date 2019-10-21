@@ -1,3 +1,8 @@
+{-|
+Module: OpenTracing.Reporting.Stdio
+
+Logging reporters that emit spans to stdout, stderr and System.IO `Handles`.
+-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module OpenTracing.Reporting.Stdio
@@ -19,13 +24,18 @@ import OpenTracing.Log
 import OpenTracing.Span
 import System.IO                  (Handle, stderr, stdout)
 
-
+-- | Implementation of `OpenTracing.Tracer.tracerReport` that logs `FinishedSpan`s to
+-- stdout
 stdoutReporter :: MonadIO m => FinishedSpan -> m ()
 stdoutReporter = stdioReporter stdout
 
+-- | Implementation of `OpenTracing.Tracer.tracerReport` that logs `FinishedSpan`s to
+-- stderr
 stderrReporter :: MonadIO m => FinishedSpan -> m ()
 stderrReporter = stdioReporter stderr
 
+-- | Implementation of `OpenTracing.Tracer.tracerReport` that logs `FinishedSpan`s to
+-- a `Handle`.
 stdioReporter :: MonadIO m => Handle -> FinishedSpan -> m ()
 stdioReporter h = liftIO . hPutStrLn h . encodingToLazyByteString . spanE
 

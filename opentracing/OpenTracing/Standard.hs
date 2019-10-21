@@ -1,3 +1,9 @@
+{-|
+Module: OpenTracing.Standard
+
+Standard implementations of `OpenTracing.Tracer` fields.
+-}
+
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns        #-}
@@ -28,7 +34,7 @@ import OpenTracing.Types
 import Prelude                      hiding (putStrLn)
 import System.Random.MWC
 
-
+-- | A standard environment for generating trace and span IDs.
 data StdEnv = StdEnv
     { envPRNG           :: GenIO
     , _envSampler       :: Sampler
@@ -42,9 +48,11 @@ newStdEnv samp = do
 
 makeLenses ''StdEnv
 
+-- | A standard implementation of `OpenTracing.Tracer.tracerStart`.
 stdTracer :: MonadIO m => StdEnv -> SpanOpts -> m Span
 stdTracer r = flip runReaderT r . start
 
+-- | A implementation of `OpenTracing.Tracer.tracerReport` that logs spans to stdout.
 stdReporter :: MonadIO m => FinishedSpan -> m ()
 stdReporter = stdoutReporter
 
