@@ -1,3 +1,24 @@
+{-|
+Module: OpenTracing
+
+The [OpenTracing spec](https://github.com/opentracing/specification/blob/master/specification.md) defines a platform agnostic approach for distributed tracing. Distributed
+tracing gives us insights into how complex programs spread across multiple processes are
+performing together.
+
+This package provides a core implementation of the OpenTracing spec. It includes
+functionality to
+
+  * Create `Span`s describing application code executions, including `Tag`s and
+    `LogRecord`s
+
+  * Serialize and deserialize `SpanContext`s across process boundaries
+
+  * Batch and log `FinishedSpan`s
+
+It does not provide any functionality for consuming `Span`s. There are platform specific
+backends (CloudTrace, Zipkin, Jaeger, etc) that are provided in other packages.
+
+-}
 {-# LANGUAGE ConstraintKinds  #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns   #-}
@@ -5,28 +26,50 @@
 {-# LANGUAGE StrictData       #-}
 
 module OpenTracing
-    ( module OpenTracing.Log
-    , module OpenTracing.Propagation
-    , module OpenTracing.Sampling
-    , module OpenTracing.Span
-    , module OpenTracing.Tags
-    , module OpenTracing.Types
-
-    , HasOpenTracing
+    ( -- * Distributed tracing
+      -- | These are mtl style constraints and runners for working with tracers in
+      -- a distributed environment. When traces cross process boundaries (for example
+      -- in an RPC call, information about the `SpanContext` needs to be transmitted
+      -- from one process to another, so that all `Span`s in the same trace can be
+      -- reported in the same trace forest.
+      --
+      -- | To satisfy these constraints, you have to have access to a `Propagation` in
+      -- the application environment, which manages serialization and deserialization of
+      -- `SpanContext`s.
+      HasOpenTracing
     , MonadOpenTracing
     , runOpenTracing
 
+      -- * Local tracing
+      -- | If you aren't tracing a distributed system, these simpler constraints
+      -- will work. The only thing required is a `Tracer.Tracer` in the application
+      -- context. If the program execution crosses process boundaries, no serialization
+      -- will be performed.
     , MonadTracer
     , Tracer.Tracer(..)
     , Tracer.HasTracer(..)
     , Tracer.runTracer
 
+    -- * Tracing functions
+    -- | Functions to trace application code
     , traced
     , traced_
     , startSpan
     , finishSpan
+
+    -- * Propagation
+    -- | Functions for serialization and deserialization in a distributed tracing
+    -- environment
     , extract
     , inject
+
+    -- * Additional modules
+    , module OpenTracing.Log
+    , module OpenTracing.Propagation
+    , module OpenTracing.Sampling
+    , module OpenTracing.Span
+    , module OpenTracing.Tags
+    , module OpenTracing.Types
     )
 where
 
