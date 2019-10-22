@@ -1,3 +1,12 @@
+{-|
+Module: OpenTracing.Propagation
+
+Types and functions for serializing and deserializing `SpanContext`s across
+process boundaries.
+
+One of the big motiviating use cases for propagation is for tracing distributed
+executions through RPC calls.
+-}
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE CPP                    #-}
 {-# LANGUAGE DataKinds              #-}
@@ -73,28 +82,40 @@ type TextMap = HashMap Text Text
 type Headers = [Header]
 --type Binary  = Lazy.ByteString
 
-
+-- | A `Propagation` contains the different ways that a `SpanContext` can be
+-- serialized and deserialized. For example @Propagation '[TextMap, Headers]@ indicates
+-- support for serializing to `Header` or to `TextMap`.
+--
+-- @since 0.1.0.0
 type Propagation carriers = Rec Carrier carriers
 
+-- | A typeclass for application environments that contain a `Propagation`.
+--
+-- @since 0.1.0.0
 class HasPropagation a p | a -> p where
     propagation :: Getting r a (Propagation p)
 
 instance HasPropagation (Propagation p) p where
     propagation = id
 
-
+-- | `Carrier a` is a way to convert a `SpanContext` into or from an `a`.
+--
+-- @since 0.1.0.0
 newtype Carrier a = Carrier { fromCarrier :: Prism' a SpanContext }
 
 type HasCarrier  c  cs = c  ∈ cs
 type HasCarriers cs ds = cs ⊆ ds
 
-
+-- | Retreive a (de)serialization lens from the application context for
+-- format @c@.
+--
+-- @since 0.1.0.0
 carrier
     :: ( HasCarrier     c cs
        , HasPropagation r cs
        )
-    => proxy c
-    -> r
+    => proxy c -- ^ Proxy for the carrier type @c@.
+    -> r -- ^ The application context
     -> Prism' c SpanContext
 carrier c =
 #if MIN_VERSION_vinyl(0,9,0)
@@ -103,7 +124,10 @@ carrier c =
   fromCarrier . view (propagation . rlens c)
 #endif
 
-
+-- | Serialize a `SpanContext` into the format `c` using a serializer from
+-- the application context.
+--
+-- @since 0.1.0.0
 inject
     :: forall c r p.
        ( HasCarrier     c p
@@ -114,6 +138,10 @@ inject
     -> c
 inject r = review (carrier (Proxy @c) r)
 
+-- | Attempt to deserialize a `SpanContext` from the format @c@ using a deserializer
+-- from the application context
+--
+-- @since 0.1.0.0.
 extract
     :: forall c r p.
        ( HasCarrier     c p
@@ -125,9 +153,12 @@ extract
 extract r = preview (carrier (Proxy @c) r)
 
 
+-- | A propagation using an "ot" prefix.
+-- No parent span id is propagated in OT.
 otPropagation :: Propagation '[TextMap, Headers]
 otPropagation = Carrier _OTTextMap :& Carrier _OTHeaders :& RNil
 
+-- | A propagation using an "x-b3" prefix for use with Zipkin.
 b3Propagation :: Propagation '[TextMap, Headers]
 b3Propagation = Carrier _B3TextMap :& Carrier _B3Headers :& RNil
 
