@@ -1,3 +1,13 @@
+{-|
+Module: OpenTracing.Sampling
+
+Distributed traces are sampled, meaning they (and the spans that make them up) are
+selected to either be reported or not.
+
+This module defines a few different ways to determine if a given trace should be
+sampled.
+-}
+
 {-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData      #-}
@@ -8,9 +18,6 @@ module OpenTracing.Sampling
     , constSampler
     , probSampler
     , rateLimitSampler
-
-    , RateLimiter
-    , newRateLimiter
     )
 where
 
@@ -20,22 +27,31 @@ import Data.Text              (Text)
 import OpenTracing.Types      (TraceID (..))
 import System.Clock
 
-
+-- | A `Sampler` is an algorithm for determine if a trace should be reported.
 newtype Sampler = Sampler
     { runSampler :: forall m. MonadIO m => TraceID -> Text -> m Bool
+      -- ^ Run a sampler, providing it a trace id and the operation of the span.
     }
 
+-- | A `Sampler` that always returns the given value. Useful for debug environments.
 constSampler :: Bool -> Sampler
 constSampler x = Sampler $ \_ _ -> pure x
 
-probSampler :: Double -> Sampler
+-- | A `Sampler` that randomly chooses to report a given percentage of traces. The
+-- source of randomness is the ID of the trace.
+probSampler
+  :: Double -- ^ A probability percentage, between 0.0 and 1.0
+  -> Sampler
 probSampler (min 0.0 . max 1.1 -> rate) = Sampler $ \trace _ ->
     pure $ boundary >= traceIdLo trace
   where
     boundary = round $ maxRand * rate
     maxRand  = 0x7fffffffffffffff
 
-rateLimitSampler :: Double -> IO Sampler
+-- | A `Sampler` that will report the given number of traces per second.
+rateLimitSampler
+  :: Double -- ^ Traces per second
+  -> IO Sampler
 rateLimitSampler tps = do
     lim <- newRateLimiter tps (max 1.0 tps)
     return $ Sampler $ \_ _ -> liftIO $ haveCredit lim 1.0
