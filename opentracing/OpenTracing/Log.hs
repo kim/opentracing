@@ -1,3 +1,9 @@
+{-|
+Module: OpenTracing.Log
+
+Logs are structured data that occur over the lifetime of a span.
+-}
+
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RankNTypes         #-}
@@ -33,14 +39,24 @@ import           Data.Time.Clock
 import           GHC.Stack
 import qualified Data.Map.Strict as Map
 
-
+-- | A single entry into a `Spans` logs. Occurs at a single time and contains multiple
+-- (one or more) entries.
+--
+-- @since 0.1.0.0
 data LogRecord = LogRecord
     { _logTime   :: UTCTime
     , _logFields :: NonEmpty LogField
     } deriving Show
 
+-- | A piece of data in a `LogRecord`. Conceptually a key:value pair with a few
+-- distinguished keys. More info about the distinguished keys in the [OpenTracing spec](https://github.com/opentracing/specification/blob/master/semantic_conventions.md#log-fields-table)
+--
+-- @since 0.1.0.0
 data LogField where
     LogField :: Show      a => Text      -> a -> LogField
+    -- ^ A generic key:value pair entry into a `LogRecord`
+    --
+    -- @since 0.1.0.0
     Event    ::                Text           -> LogField
     Message  ::                Text           -> LogField
     Stack    ::                CallStack      -> LogField
@@ -51,12 +67,24 @@ deriving instance (Show LogField)
 
 type LogFieldsFormatter = forall t. Foldable t => t LogField -> Builder
 
+-- | A log formatter that encodes each `LogField` as a single JSON object.
+--
+-- >>> BS.hPutBuilder stdout $ jsonAssoc [Event "e", LogField @Text "key" "value"]
+-- [{"event":"\"e\""},{"key":"\"value\""}]
+--
+-- @since 0.1.0.0
 jsonAssoc :: LogFieldsFormatter
 jsonAssoc = Encoding.fromEncoding . Encoding.list go . toList
   where
     go lf = Encoding.pairs $
         Encoding.pair (logFieldLabel lf) (logFieldEncoding lf)
 
+-- | A log formatter that encodes each `LogField` as an entry in a shared JSON object
+--
+-- >>> BS.hPutBuilder stdout $ jsonMap  [Event "e", LogField @Text "key" "value"]
+-- {"event":"e","key":"\"value\""}
+--
+-- @since 0.1.0.0
 jsonMap :: LogFieldsFormatter
 jsonMap
     = Encoding.fromEncoding
@@ -65,6 +93,9 @@ jsonMap
   where
     merge lf = Map.insert (logFieldLabel lf) (logFieldEncoding lf)
 
+-- | Retrieve the label of a log field. Distinguished `LogField`s have predefined keys.
+--
+-- @since 0.1.0.0
 logFieldLabel :: LogField -> Text
 logFieldLabel (LogField x _) = x
 logFieldLabel (Event      _) = "event"
