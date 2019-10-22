@@ -69,8 +69,8 @@ runTracer = flip runReaderT
 -- exception
 --
 -- @
---         traced_ (spanOpts "hello" mempty          ) $ \parent ->
---         traced_ (spanOpts "world" (childOf parent)) $ \child ->
+--         traced tracer (spanOpts "hello" mempty          ) $ \parent ->
+--         traced tracer (spanOpts "world" (childOf parent)) $ \child ->
 --            liftIO $ do
 --                putStrLn "doing some work..."
 --                addLogRecord child (Message "doing some work")
@@ -83,7 +83,7 @@ traced
        , MonadMask m
        , MonadIO   m
        )
-    => t -- ^ A tracer environemtn
+    => t -- ^ A tracer environment
     -> SpanOpts -- ^ The options to use when creating the span. Options include:
     --
     --   * Operation name
