@@ -16,6 +16,9 @@ module OpenTracing.Tags
     , getTag
     , getTagReify
 
+    -- * Standard span tags.
+    -- | Refer to the [OpenTracing spec](https://github.com/opentracing/specification/blob/master/semantic_conventions.md#span-tags-table)
+    -- for more info.
     , pattern ComponentKey
     , pattern DbInstanceKey
     , pattern DbStatementKey
@@ -97,10 +100,14 @@ import           Network.HTTP.Types
 import           OpenTracing.Types
 import           Text.Read                   (readMaybe)
 
-
+-- | Tags are structured data associated with a `OpenTracing.Span.Span`. They can give
+-- a more complete picture of what a Span is doing than the operation alone. Tags
+-- apply to the entire timerange of a Span. Use `OpenTracing.Log.LogField` for
+-- events that refer to particular timestamp.
 newtype Tags = Tags { fromTags :: HashMap Text TagVal }
     deriving (Eq, Show, Semigroup, Monoid, ToJSON)
 
+-- | A Tag is a key:value pair
 type Tag = (Text, TagVal)
 
 data TagVal
@@ -130,6 +137,7 @@ setTag (k,v) = Tags . HashMap.insert k v . fromTags
 getTag :: Text -> Tags -> Maybe TagVal
 getTag k = HashMap.lookup k . fromTags
 
+-- | Get a tag and attempt to convert it from a serialized format
 getTagReify :: Getting (First b) Tag b -> Text -> Tags -> Maybe b
 getTagReify p k ts = getTag k ts >>= preview p . (k,)
 
