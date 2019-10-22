@@ -141,7 +141,7 @@ inject r = review (carrier (Proxy @c) r)
 -- | Attempt to deserialize a `SpanContext` from the format @c@ using a deserializer
 -- from the application context
 --
--- @since 0.1.0.0.
+-- @since 0.1.0.0
 extract
     :: forall c r p.
        ( HasCarrier     c p

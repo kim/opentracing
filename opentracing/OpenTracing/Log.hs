@@ -53,14 +53,22 @@ data LogRecord = LogRecord
 --
 -- @since 0.1.0.0
 data LogField where
+    -- | A generic key:value pair entry into a `LogRecord`
     LogField :: Show      a => Text      -> a -> LogField
-    -- ^ A generic key:value pair entry into a `LogRecord`
-    --
-    -- @since 0.1.0.0
+
+    -- | A stable identifier for some notable moment in the lifetime of a Span.
     Event    ::                Text           -> LogField
+
+    -- | A concise, human-readable, one-line message explaining the event.
     Message  ::                Text           -> LogField
+
+    -- | A stack trace in platform-conventional format
     Stack    ::                CallStack      -> LogField
+
+    -- | The type or "kind" of an error (only for event="error" logs).
     ErrKind  ::                Text           -> LogField
+
+    -- | The actual error exception
     ErrObj   :: Exception e => e              -> LogField
 
 deriving instance (Show LogField)
