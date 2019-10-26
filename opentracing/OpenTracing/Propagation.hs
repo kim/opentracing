@@ -106,7 +106,7 @@ newtype Carrier a = Carrier { fromCarrier :: Prism' a SpanContext }
 type HasCarrier  c  cs = c  ∈ cs
 type HasCarriers cs ds = cs ⊆ ds
 
--- | Retreive a (de)serialization lens from the application context for
+-- | Retrieve a (de)serialization lens from the application context for
 -- format @c@.
 --
 -- @since 0.1.0.0

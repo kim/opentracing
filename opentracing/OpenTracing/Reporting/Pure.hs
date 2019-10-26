@@ -43,7 +43,7 @@ data Mem = Mem
 newMem :: IO Mem
 newMem = Mem Nothing <$> newIORef []
 
--- | Construct a new `memReprioerter` environment that stores a bounded
+-- | Construct a new `memReporter` environment that stores a bounded
 -- sequence of `FinishedSpan`s
 newBoundedMem :: Word32 -> IO Mem
 newBoundedMem s = Mem (Just s) <$> newIORef []

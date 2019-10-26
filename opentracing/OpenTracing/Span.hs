@@ -1,7 +1,7 @@
 {-|
 Module: OpenTracing.Span
 
-Data types and functions for manipulation [spans](https://github.com/opentracing/specification/blob/master/specification.md#span)
+Data types and functions for manipulating [spans](https://github.com/opentracing/specification/blob/master/specification.md#span)
 -}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -91,7 +91,7 @@ import OpenTracing.Types
 import Prelude                hiding (span)
 
 -- | A `SpanContext` is the data that uniquely identifies a span
--- and context in which it occurs. Spans occur in traces, which form
+-- and the context in which it occurs. Spans occur in traces, which form
 -- complete pictures of a computation, potentially across multiple machines.
 --
 -- @since 0.1.0.0
@@ -105,7 +105,7 @@ data SpanContext = SpanContext
     , _ctxSampled     :: Sampled
     -- ^ Whether or not this span is going to be reported.
     , _ctxBaggage     :: HashMap Text Text
-    -- ^ Baggage is arbitrary key:value pars that cross process boundaries.
+    -- ^ Baggage is arbitrary key:value pairs that cross process boundaries.
     }
 
 instance ToJSON SpanContext where
@@ -129,7 +129,7 @@ data Traced a = Traced
     { tracedResult :: a
     -- ^ The raw value produced
     , tracedSpan   :: ~FinishedSpan
-    -- ^ The resulting span that was creating
+    -- ^ The resulting span that was created
     }
 
 -- | A datatype indicating whether a recorded span was sampled, i.e. whether or not
@@ -154,7 +154,7 @@ _IsSampled = iso (bool NotSampled Sampled) $ \case
 --   * `ChildOf` indicates that the parent span is dependent on the child span in order
 --      to produce its own result.
 --
---   * `FollowersFrom` indicates that there is no dependence relation, perhaps the
+--   * `FollowsFrom` indicates that there is no dependence relation, perhaps the
 --      parent span spawned an asynchronous task.
 --
 -- More info in the [OpenTracing spec](https://github.com/opentracing/specification/blob/master/specification.md#references-between-spans)

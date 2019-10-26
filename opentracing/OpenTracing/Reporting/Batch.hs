@@ -62,7 +62,7 @@ data BatchOptions = BatchOptions
     -- ^ What to do with errors. Default print to stderr.
     }
 
--- | Default batch options which can be overloaded via lenses.
+-- | Default batch options which can be overridden via lenses.
 batchOptions :: ([FinishedSpan] -> IO ()) -> BatchOptions
 batchOptions f = BatchOptions
     { _boptBatchSize  = 100
@@ -83,7 +83,7 @@ data BatchEnv = BatchEnv
     { envQ   :: TQueue FinishedSpan
     -- ^ The queue of spans to be reported
     , envRep :: Async ()
-    -- ^ Asyncronous consumer of the queue
+    -- ^ Asynchronous consumer of the queue
     }
 
 -- | Create a new batch environment
@@ -92,7 +92,7 @@ newBatchEnv opt = do
     q <- newTQueueIO
     BatchEnv q <$> consumer opt q
 
--- | Close a batch reporter, stop consiming any new spans. Any
+-- | Close a batch reporter, stop consuming any new spans. Any
 -- spans in the queue will be drained.
 closeBatchEnv :: BatchEnv -> IO ()
 closeBatchEnv = cancel . envRep
