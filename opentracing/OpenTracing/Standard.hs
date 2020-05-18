@@ -23,6 +23,7 @@ module OpenTracing.Standard
     )
 where
 
+import Control.Concurrent (MVar, newMVar, withMVar)
 import Control.Lens                 hiding (Context, (.=))
 import Control.Monad.Reader
 import Data.Monoid
@@ -36,7 +37,7 @@ import System.Random.MWC
 
 -- | A standard environment for generating trace and span IDs.
 data StdEnv = StdEnv
-    { envPRNG           :: GenIO
+    { envPRNGRef        :: MVar GenIO
     , _envSampler       :: Sampler
     , _envTraceID128bit :: Bool
     }
@@ -44,7 +45,8 @@ data StdEnv = StdEnv
 newStdEnv :: MonadIO m => Sampler -> m StdEnv
 newStdEnv samp = do
     prng <- liftIO createSystemRandom
-    return StdEnv { envPRNG = prng, _envSampler = samp, _envTraceID128bit = True }
+    prngRef <- liftIO $ newMVar prng
+    return StdEnv { envPRNGRef = prngRef, _envSampler = samp, _envTraceID128bit = True }
 
 makeLenses ''StdEnv
 
@@ -74,15 +76,19 @@ start so = do
 newTraceID :: (MonadIO m, MonadReader StdEnv m) => m TraceID
 newTraceID = do
     StdEnv{..} <- ask
-    hi <- if _envTraceID128bit then
-              Just <$> liftIO (uniform envPRNG)
-          else
-              pure Nothing
-    lo <- liftIO $ uniform envPRNG
-    return TraceID { traceIdHi = hi, traceIdLo = lo }
+    liftIO $ withMVar envPRNGRef $ \prng -> do
+      hi <- if _envTraceID128bit then
+                Just <$> liftIO (uniform prng)
+            else
+                pure Nothing
+      lo <- liftIO $ uniform prng
+      return TraceID { traceIdHi = hi, traceIdLo = lo }
 
 newSpanID :: (MonadIO m, MonadReader StdEnv m) => m Word64
-newSpanID = asks envPRNG >>= liftIO . uniform
+newSpanID = do
+  prngRef <- asks envPRNGRef
+  liftIO $ withMVar prngRef $ \prng -> do
+    uniform prng
 
 freshContext
     :: ( MonadIO            m
