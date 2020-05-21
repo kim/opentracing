@@ -43,6 +43,6 @@ library:
     - QuickCheck
     - safe-exceptions
     - text
-    - thrift
+    - thrift >= 0.11.0
     - unordered-containers
     - vector
