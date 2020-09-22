@@ -17,7 +17,6 @@ os: linux
 dist: bionic
 
 env:
-  - PACKAGE=.
   - PACKAGE=opentracing
   - PACKAGE=opentracing-cloudtrace
   - PACKAGE=opentracing-examples
@@ -33,7 +32,8 @@ script:
   - if [ ! -d "$DIR" ]; then mkdir -p $DIR; fi
   - stack upgrade
   - hash -r
-  - cd $PACKAGE
-  - stack setup
-  - stack build
-  - stack test
+  - travis_retry eval $"stack setup"
+  - travis_retry eval $"stack build --dependencies-only $PACKAGE"
+  - stack build $PACKAGE
+  - travis_retry eval $"stack test --no-run-tests $PACKAGE"
+  - stack test $PACKAGE
