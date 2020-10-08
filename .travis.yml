@@ -1,0 +1,40 @@
+# https://docs.haskellstack.org/en/stable/travis_ci/
+
+language: generic
+cache:
+  directories:
+  - $HOME/.local/bin
+  - $HOME/.stack
+  - $TRAVIS_BUILD_DIR/.stack-work
+
+addons:
+  apt:
+    packages:
+      - haskell-stack
+
+os: linux
+
+dist: bionic
+
+env:
+  - PACKAGE=opentracing
+  - PACKAGE=opentracing-cloudtrace
+  - PACKAGE=opentracing-examples
+  - PACKAGE=opentracing-http-client
+  - PACKAGE=opentracing-jaeger
+  - PACKAGE=opentracing-wai
+  - PACKAGE=opentracing-zipkin-common
+  - PACKAGE=opentracing-zipkin-v1
+  - PACKAGE=opentracing-zipkin-v2
+
+script:
+  - export DIR=~/.local/bin
+  - if [ ! -d "$DIR" ]; then mkdir -p $DIR; fi
+  - export PATH=~/.local/bin:$PATH
+  - travis_retry eval $"stack upgrade"
+  - hash -r
+  - stack --version
+  - travis_retry eval $"stack build --dependencies-only $PACKAGE"
+  - stack build $PACKAGE
+  - travis_retry eval $"stack test --no-run-tests $PACKAGE"
+  - stack test $PACKAGE

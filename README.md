@@ -1,5 +1,7 @@
 # OpenTracing for Haskell
 
+[![Build Status](https://travis-ci.com/kim/opentracing.svg?branch=master)](https://travis-ci.com/kim/opentracing)
+
 [OpenTracing](http://opentracing.io) is an attempt to define a common API to
 instrument code for
 [Dapper](https://research.google.com/pubs/pub36356.html)-style distributed
