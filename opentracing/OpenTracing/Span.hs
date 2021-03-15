@@ -302,17 +302,17 @@ newSpan ctx op refs ts = do
 newtype ActiveSpan = ActiveSpan { fromActiveSpan :: IORef Span }
 
 -- | @since 0.1.0.0
-mkActive :: Span -> IO ActiveSpan
-mkActive = fmap ActiveSpan . newIORef
+mkActive :: MonadIO m => Span -> m ActiveSpan
+mkActive = fmap ActiveSpan . liftIO . newIORef
 
 -- | @since 0.1.0.0
-modifyActiveSpan :: ActiveSpan -> (Span -> Span) -> IO ()
+modifyActiveSpan :: MonadIO m => ActiveSpan -> (Span -> Span) -> m ()
 modifyActiveSpan ActiveSpan{fromActiveSpan} f =
-    atomicModifyIORef' fromActiveSpan ((,()) . f)
+  liftIO $ atomicModifyIORef' fromActiveSpan ((,()) . f)
 
 -- | @since 0.1.0.0
-readActiveSpan :: ActiveSpan -> IO Span
-readActiveSpan = readIORef . fromActiveSpan
+readActiveSpan :: MonadIO m => ActiveSpan -> m Span
+readActiveSpan = liftIO . readIORef . fromActiveSpan
 
 -- | A span that has finished executing.
 --
@@ -402,19 +402,19 @@ spanDuration = fDuration
 -- | Log structured data to an `ActiveSpan`. More info in the [OpenTracing spec](https://github.com/opentracing/specification/blob/master/specification.md#log-structured-data)
 --
 -- @since 0.1.0.0
-addLogRecord :: ActiveSpan -> LogField -> IO ()
+addLogRecord :: MonadIO m => ActiveSpan -> LogField -> m ()
 addLogRecord s f = addLogRecord' s f []
 
-addLogRecord' :: ActiveSpan -> LogField -> [LogField] -> IO ()
-addLogRecord' s f fs = do
+addLogRecord' :: MonadIO m => ActiveSpan -> LogField -> [LogField] -> m ()
+addLogRecord' s f fs = liftIO $ do
     t <- getCurrentTime
     modifyActiveSpan s $
         over spanLogs (LogRecord t (f :| fs):)
 
 
-setBaggageItem :: ActiveSpan -> Text -> Text -> IO ()
+setBaggageItem :: MonadIO m => ActiveSpan -> Text -> Text -> m ()
 setBaggageItem s k v = modifyActiveSpan s $
-    over (spanContext . ctxBaggage) (insert k v)
+  over (spanContext . ctxBaggage) (insert k v)
 
-getBaggageItem :: ActiveSpan -> Text -> IO (Maybe Text)
+getBaggageItem :: MonadIO m => ActiveSpan -> Text -> m (Maybe Text)
 getBaggageItem s k = view (spanContext . ctxBaggage . at k) <$> readActiveSpan s
