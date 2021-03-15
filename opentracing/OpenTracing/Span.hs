@@ -29,6 +29,7 @@ module OpenTracing.Span
     , mkActive
     , modifyActiveSpan
     , readActiveSpan
+    , addTag
     , addLogRecord
     , addLogRecord'
     , setBaggageItem
@@ -399,6 +400,10 @@ instance HasRefs FinishedSpan [Reference] where
 spanDuration :: Lens' FinishedSpan NominalDiffTime
 spanDuration = fDuration
 
+addTag :: MonadIO m => ActiveSpan -> Tag -> m ()
+addTag s t = liftIO $ do
+    modifyActiveSpan s $ over spanTags (setTag t)
+
 -- | Log structured data to an `ActiveSpan`. More info in the [OpenTracing spec](https://github.com/opentracing/specification/blob/master/specification.md#log-structured-data)
 --
 -- @since 0.1.0.0
@@ -410,7 +415,6 @@ addLogRecord' s f fs = liftIO $ do
     t <- getCurrentTime
     modifyActiveSpan s $
         over spanLogs (LogRecord t (f :| fs):)
-
 
 setBaggageItem :: MonadIO m => ActiveSpan -> Text -> Text -> m ()
 setBaggageItem s k v = modifyActiveSpan s $
