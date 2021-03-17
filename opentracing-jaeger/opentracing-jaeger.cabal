@@ -1,0 +1,64 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: dc7f14cb9e9e0a2b1b4caf7c269b64f9ad8e91b38daff88d25ea40d6a445f50b
+
+name:           opentracing-jaeger
+version:        0.1.0.0
+synopsis:       Jaeger backend for OpenTracing
+homepage:       https://github.com/kim/opentracing
+bug-reports:    https://github.com/kim/opentracing/issues
+author:         Kim Altintop
+maintainer:     Kim Altintop <kim.altintop+opentracing@gmail.com>
+copyright:      Copyright (c) 2017-2018 Kim Altintop
+license:        Apache-2.0
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    CHANGELOG.md
+    README.md
+
+source-repository head
+  type: git
+  location: git@github.com:kim/opentracing.git
+
+library
+  exposed-modules:
+      OpenTracing.Jaeger
+      OpenTracing.Jaeger.AgentReporter
+      OpenTracing.Jaeger.CollectorReporter
+      OpenTracing.Jaeger.Propagation
+      OpenTracing.Jaeger.Thrift
+  other-modules:
+      Jaeger_Consts
+      Jaeger_Types
+      Agent
+      Agent_Client
+      Agent_Types
+      Agent_Iface
+      Zipkincore_Types
+  hs-source-dirs:
+      src
+      gen-src
+  ghc-options: -Wall -funbox-small-strict-fields -Wincomplete-uni-patterns -Wincomplete-record-updates -Wcompat -Wnoncanonical-monad-instances -Wnoncanonical-monadfail-instances
+  build-depends:
+      QuickCheck
+    , base
+    , bytestring
+    , exceptions
+    , hashable
+    , http-client
+    , http-types
+    , lens
+    , mtl
+    , network
+    , opentracing
+    , safe-exceptions
+    , text
+    , thrift >=0.11.0
+    , unordered-containers
+    , vector
+  default-language: Haskell2010

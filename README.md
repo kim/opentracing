@@ -1,6 +1,6 @@
 # OpenTracing for Haskell
 
-[![Build Status](https://travis-ci.com/kim/opentracing.svg?branch=master)](https://travis-ci.com/kim/opentracing)
+[![Build Status](https://travis-ci.com/kim/opentracing.svg?branch=master)](https://travis-ci.com/kim/opentracing) [![Build Status](https://github.com/kim/opentracing/actions/workflows/ci.yml/badge.svg)](https://github.com/kim/opentracing/actions/workflows/ci.yml)
 
 [OpenTracing](http://opentracing.io) is an attempt to define a common API to
 instrument code for

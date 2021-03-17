@@ -1,0 +1,47 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: c4a3f61f85b411d5a6a6dd8bf41f6922cc4ac28db75ade3243e2ce8937ec5b43
+
+name:           opentracing-cloudtrace
+version:        0.1.0.0
+synopsis:       OpenTracing reporter for Google Cloudtrace (aka Stackdriver Trace)
+homepage:       https://github.com/kim/opentracing
+bug-reports:    https://github.com/kim/opentracing/issues
+author:         Kim Altintop
+maintainer:     Kim Altintop <kim.altintop+opentracing@gmail.com>
+copyright:      Copyright (c) 2017-2018 Kim Altintop
+license:        Apache-2.0
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    CHANGELOG.md
+    README.md
+
+source-repository head
+  type: git
+  location: git@github.com:kim/opentracing.git
+
+library
+  exposed-modules:
+      OpenTracing.CloudTrace
+  other-modules:
+      Paths_opentracing_cloudtrace
+  ghc-options: -Wall -funbox-small-strict-fields -Wincomplete-uni-patterns -Wincomplete-record-updates -Wcompat -Wnoncanonical-monad-instances -Wnoncanonical-monadfail-instances
+  build-depends:
+      aeson
+    , base
+    , exceptions
+    , gogol
+    , gogol-cloudtrace
+    , gogol-logging
+    , http-client
+    , lens
+    , opentracing
+    , text
+    , time
+    , unordered-containers
+  default-language: Haskell2010

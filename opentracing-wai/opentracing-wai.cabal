@@ -1,0 +1,40 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: e4270b2e2c9669c022ae8002a767dea36951071a852ff145fdd929d5f16baf1d
+
+name:           opentracing-wai
+version:        0.1.0.0
+synopsis:       Middleware adding OpenTracing tracing for WAI applications
+homepage:       https://github.com/kim/opentracing
+bug-reports:    https://github.com/kim/opentracing/issues
+author:         Kim Altintop
+maintainer:     Kim Altintop <kim.altintop+opentracing@gmail.com>
+copyright:      Copyright (c) 2017-2018 Kim Altintop
+license:        Apache-2.0
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    CHANGELOG.md
+    README.md
+
+source-repository head
+  type: git
+  location: git@github.com:kim/opentracing.git
+
+library
+  exposed-modules:
+      Network.Wai.Middleware.OpenTracing
+  other-modules:
+      Paths_opentracing_wai
+  ghc-options: -Wall -funbox-small-strict-fields -Wincomplete-uni-patterns -Wincomplete-record-updates -Wcompat -Wnoncanonical-monad-instances -Wnoncanonical-monadfail-instances
+  build-depends:
+      base
+    , lens
+    , opentracing
+    , text
+    , wai
+  default-language: Haskell2010

@@ -1,0 +1,11 @@
+packages:
+  opentracing
+  opentracing-cloudtrace
+  opentracing-examples
+  opentracing-http-client
+  opentracing-jaeger
+  opentracing-wai
+  opentracing-zipkin-common
+  opentracing-zipkin-v1
+  opentracing-zipkin-v2
+        
