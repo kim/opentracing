@@ -10,4 +10,9 @@ packages:
   opentracing-zipkin-v2
 
 constraints:
-  thrift >= 0.13.0
+  servant < 0.13,
+  thrift >= 0.13.0,
+  gogol == 0.3.*,
+  gogol-core == 0.3.*,
+  conduit < 1.3
+  
