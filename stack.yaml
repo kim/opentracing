@@ -10,7 +10,13 @@ packages:
 - opentracing-zipkin-common
 - opentracing-zipkin-v1
 - opentracing-zipkin-v2
+resolver: lts-17.6
+
 extra-deps:
-- thrift-0.12.0
-- optparse-applicative-0.14.0.0
-resolver: lts-9.21
+- gogol-0.5.0@sha256:01b38acf97ae0afb2465935fee1bebce03c1b84e629cf0887467be7ae361f0a7,3222
+- gogol-cloudtrace-0.5.0@sha256:1fe6b948c71323b9140f1fde490405281a4d5904f004c2735fe783b1b4ae93ed,1915
+- gogol-logging-0.5.0@sha256:178038e2b494a822d17e7a7d4e8b565afb983fefdec0f09391224503c23cf47a,6116
+- thrift-0.13.0@sha256:e7c1f0f3562dd3fe412ffbd6743c87e9c65f43798593c06f8be8c547be2cd19e,2742
+- gogol-core-0.5.0@sha256:c0a919cd89a33de7fd6ee925abdb48b0eb5d1002a016124acbdff568f267e4c7,2821
+- network-2.8.0.1@sha256:0f165dffa752d8cde30c2bde86f80609c4f1dc5eeb3182d593041f97839c5b3b,3011
+- thrift-0.13.0

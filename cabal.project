@@ -8,4 +8,6 @@ packages:
   opentracing-zipkin-common
   opentracing-zipkin-v1
   opentracing-zipkin-v2
-        
+
+constraints:
+  thrift >= 0.13.0
