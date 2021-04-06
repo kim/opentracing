@@ -1,0 +1,48 @@
+cabal-version: 2.2
+
+name:           opentracing-zipkin-v2
+version:        0.1.0.0
+synopsis:       Zipkin V2 backend for OpenTracing
+homepage:       https://github.com/kim/opentracing
+bug-reports:    https://github.com/kim/opentracing/issues
+author:         Kim Altintop
+maintainer:     Kim Altintop <kim.altintop+opentracing@gmail.com>
+copyright:      Copyright (c) 2017-2018 Kim Altintop
+license:        Apache-2.0
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    CHANGELOG.md
+    README.md
+
+source-repository head
+  type: git
+  location: git@github.com:kim/opentracing.git
+
+library
+  exposed-modules:
+      OpenTracing.Zipkin.V2
+      OpenTracing.Zipkin.V2.HttpReporter
+  other-modules:
+      Paths_opentracing_zipkin_v2
+  ghc-options:
+    -Wall
+    -funbox-small-strict-fields
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wcompat
+    -Wnoncanonical-monad-instances
+    -Wnoncanonical-monadfail-instances
+  build-depends:
+      aeson >= 1.1
+    , base >= 4.9 && < 4.15
+    , base64-bytestring >= 1.0
+    , bytestring >= 0.10
+    , exceptions >= 0.8
+    , http-client >= 0.5
+    , http-types >= 0.9
+    , lens >= 4.19
+    , opentracing >= 0.1
+    , opentracing-zipkin-common >= 0.1
+    , text >= 1.2
+  default-language: Haskell2010

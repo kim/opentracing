@@ -119,7 +119,7 @@ echoServer env@Env{envManager=mgr} span req respond = respond $
         cnt <- newIORef (0 :: Int)
 
         fix $ \loop -> do
-            chunk <- Wai.requestBody req
+            chunk <- Wai.getRequestBodyChunk req
             write (byteString chunk) *> flush
             modifyIORef' cnt (+ BS.length chunk)
             unless (BS.null chunk) loop

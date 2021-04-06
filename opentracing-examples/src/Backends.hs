@@ -15,7 +15,6 @@ import           Data.Semigroup         ((<>))
 import           Data.Text              (Text)
 import           Network.HTTP.Client    (defaultManagerSettings, newManager)
 import           OpenTracing
-import           OpenTracing.CloudTrace
 import           OpenTracing.Jaeger
 import           OpenTracing.Standard
 import qualified OpenTracing.Zipkin.V1  as ZipkinV1
@@ -32,12 +31,11 @@ data Backend
     | Zipkin ZipkinAPI
     | JaegerAgent
     | JaegerCollector
-    | CloudTrace ProjectId
     deriving (Show, Read)
 
 
 parseBackend :: Parser Backend
-parseBackend = std <|> zipkin <|> jaegerAgent <|> jaegerCollector <|> cloudtrace
+parseBackend = std <|> zipkin <|> jaegerAgent <|> jaegerCollector
   where
     std = flag' Std
         ( long "std"
@@ -68,20 +66,6 @@ parseBackend = std <|> zipkin <|> jaegerAgent <|> jaegerCollector <|> cloudtrace
         ( long "jaeger-collector"
        <> help "Report via HTTP to a Jaeger Collector running on localhost"
         )
-
-    cloudtrace = flag' ()
-        ( long "cloudtrace"
-       <> help "Report to Google CloudTrace (aka Stackdriver Trace)"
-        )
-
-        *> ( CloudTrace
-          <$> strOption
-              ( short 'p'
-             <> long "project"
-             <> help "GCloud project id"
-              )
-           )
-
 
 class HasServiceName a where
     srvName :: Lens' a Text
@@ -141,8 +125,3 @@ withBackend be cfg f = do
                      }
             ZipkinV2.withZipkin (cfg opts) $ \z ->
                 f std { tracerReport = ZipkinV2.zipkinHttpReporter z }
-
-        CloudTrace pid -> do
-            opt <- simpleCloudTraceOptions pid Nothing
-            withCloudTrace opt $ \c ->
-                f std { tracerReport = cloudTraceReporter c }
