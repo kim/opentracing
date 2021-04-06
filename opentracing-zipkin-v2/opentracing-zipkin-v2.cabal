@@ -35,7 +35,7 @@ library
     -Wnoncanonical-monadfail-instances
   build-depends:
       aeson >= 1.1
-    , base >= 4.9 && < 4.15
+    , base >= 4.8 && < 4.16
     , base64-bytestring >= 1.0
     , bytestring >= 0.10
     , exceptions >= 0.8

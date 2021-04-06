@@ -1,0 +1,65 @@
+name: Matrix Build
+
+on: pull_request
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.versions.allow-failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        versions:
+          # For historical purposes: the library was developed on GHC 8.0.2
+          - ghc: '8.0'
+            cabal: '3.4'
+            allow-failure: false
+          # MSHV: three major versions
+          - ghc: '8.6'
+            cabal: '3.4'
+            allow-failure: false
+          - ghc: '8.8'
+            cabal: '3.4'
+            allow-failure: false
+          - ghc: '8.10'
+            cabal: '3.4'
+            allow-failure: false
+          # GHC 9 is a "super-major" release, needs some CPP
+          - ghc: '9.0'
+            cabal: '3.4'
+            allow-failure: true
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install recent cabal/ghc
+      uses: haskell/actions/setup@v1
+      with:
+        ghc-version: ${{ matrix.versions.ghc }}
+        cabal-version: ${{ matrix.versions.cabal }}
+
+    - name: Cache cabal global package db
+      id:   cabal-global
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cabal
+        key: ${{ runner.os }}-${{ matrix.versions.ghc }}-${{ matrix.versions.cabal }}-cabal-global-${{ hashFiles('cabal.project') }}
+
+    - name: Cache cabal work
+      id:   cabal-local
+      uses: actions/cache@v2
+      with:
+        path: |
+          dist-newstyle
+        key: ${{ runner.os }}-${{ matrix.versions.ghc }}-${{ matrix.versions.cabal }}-cabal-local
+
+    - name: Install dependencies
+      run: |
+          cabal update
+          cabal build all --dependencies-only --enable-tests --disable-optimization
+    - name: Build
+      run: |
+          cabal build all --enable-tests --disable-optimization 2>&1
+    - name: Test
+      run: |
+          cabal test all --disable-optimization

@@ -47,7 +47,7 @@ library
     -Wnoncanonical-monadfail-instances
   build-depends:
       QuickCheck
-    , base >=4.9 && < 4.15
+    , base >= 4.8 && < 4.16
     , bytestring >= 0.10
     , exceptions >= 0.8
     , hashable >= 1.2

@@ -33,7 +33,7 @@ library
     -Wnoncanonical-monad-instances
     -Wnoncanonical-monadfail-instances
   build-depends:
-      base >= 4.9 && < 4.15
+      base >= 4.8 && < 4.16
     , lens >= 4.19
     , opentracing >= 0.1
     , text >= 1.2
