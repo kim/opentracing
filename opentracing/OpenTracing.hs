@@ -21,7 +21,6 @@ backends (CloudTrace, Zipkin, Jaeger, etc) that are provided in other packages.
 -}
 {-# LANGUAGE ConstraintKinds  #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE NamedFieldPuns   #-}
 {-# LANGUAGE RankNTypes       #-}
 {-# LANGUAGE StrictData       #-}
 
