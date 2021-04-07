@@ -33,7 +33,7 @@ module OpenTracing
       -- from one process to another, so that all `Span`s in the same trace can be
       -- reported in the same trace forest.
       --
-      -- | To satisfy these constraints, you have to have access to a `Propagation` in
+      -- To satisfy these constraints, you have to have access to a `Propagation` in
       -- the application environment, which manages serialization and deserialization of
       -- `SpanContext`s.
       HasOpenTracing
