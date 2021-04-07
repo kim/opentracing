@@ -61,7 +61,7 @@ data AgentTransport = AgentTransport
     }
 
 instance Thrift.Transport AgentTransport where
-    tIsOpen = isConnected . transSock
+    tIsOpen = const (pure True)
     tWrite  = Thrift.writeBuf . transBuf
 
     tFlush AgentTransport{..} =

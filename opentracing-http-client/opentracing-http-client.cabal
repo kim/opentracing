@@ -31,9 +31,8 @@ library
     -Wincomplete-record-updates
     -Wcompat
     -Wnoncanonical-monad-instances
-    -Wnoncanonical-monadfail-instances
   build-depends:
-      base >= 4.8 && < 4.16
+      base >= 4.9 && < 4.16
     , http-client >= 0.5
     , lens >= 4.19
     , mtl >= 2.2

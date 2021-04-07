@@ -44,10 +44,9 @@ library
     -Wincomplete-record-updates
     -Wcompat
     -Wnoncanonical-monad-instances
-    -Wnoncanonical-monadfail-instances
   build-depends:
       QuickCheck
-    , base >= 4.8 && < 4.16
+    , base >= 4.9 && < 4.16
     , bytestring >= 0.10
     , exceptions >= 0.8
     , hashable >= 1.2

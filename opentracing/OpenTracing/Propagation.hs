@@ -8,13 +8,11 @@ One of the big motiviating use cases for propagation is for tracing distributed
 executions through RPC calls.
 -}
 {-# LANGUAGE ConstraintKinds        #-}
-{-# LANGUAGE CPP                    #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase             #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE RecordWildCards        #-}
@@ -22,7 +20,6 @@ executions through RPC calls.
 {-# LANGUAGE TupleSections          #-}
 {-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE TypeSynonymInstances   #-}
 
 module OpenTracing.Propagation
     ( TextMap
@@ -117,12 +114,7 @@ carrier
     => proxy c -- ^ Proxy for the carrier type @c@.
     -> r -- ^ The application context
     -> Prism' c SpanContext
-carrier c =
-#if MIN_VERSION_vinyl(0,9,0)
-  fromCarrier . view (propagation . rlens)
-#else
-  fromCarrier . view (propagation . rlens c)
-#endif
+carrier _c = fromCarrier . view (propagation . rlens)
 
 -- | Serialize a `SpanContext` into the format `c` using a serializer from
 -- the application context.

@@ -33,7 +33,6 @@ common deps
     -Wincomplete-record-updates
     -Wcompat
     -Wnoncanonical-monad-instances
-    -Wnoncanonical-monadfail-instances
 
 library
   import: deps
