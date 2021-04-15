@@ -11,10 +11,11 @@ module OpenTracing.Zipkin.V1.HttpReporter
     , zipkinOptions
     , zoManager
     , zoLocalEndpoint
-    , zoAddr
+    , zoEndpoint
     , zoLogfmt
     , zoErrorLog
 
+    , defaultZipkinEndpoint
     , defaultZipkinAddr
 
     , Zipkin
@@ -52,7 +53,7 @@ newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 data ZipkinOptions = ZipkinOptions
     { _zoManager       :: Manager
     , _zoLocalEndpoint :: Endpoint
-    , _zoAddr          :: Addr 'HTTP
+    , _zoEndpoint      :: String
     , _zoLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
     , _zoErrorLog      :: Builder -> IO ()
     }
@@ -63,13 +64,22 @@ zipkinOptions :: Manager -> Endpoint -> ZipkinOptions
 zipkinOptions mgr loc = ZipkinOptions
     { _zoManager       = mgr
     , _zoLocalEndpoint = loc
-    , _zoAddr          = defaultZipkinAddr
+    , _zoEndpoint      = defaultZipkinEndpoint
     , _zoLogfmt        = jsonMap
     , _zoErrorLog      = defaultErrorLog
     }
 
+defaultZipkinEndpoint :: String
+defaultZipkinEndpoint = "http://"
+    <> view addrHostName addr
+    <> ":"
+    <> show (view addrPort addr)
+    <> "/api/v1/spans"
+  where
+    addr = defaultZipkinAddr
+
 newZipkin :: ZipkinOptions -> IO Zipkin
-newZipkin opts@ZipkinOptions{_zoErrorLog=errlog} = do
+newZipkin opts@ZipkinOptions{_zoEndpoint=endpoint, _zoErrorLog=errlog} = do
     rq <- mkReq
     fmap Zipkin
         . newBatchEnv
@@ -77,18 +87,8 @@ newZipkin opts@ZipkinOptions{_zoErrorLog=errlog} = do
         $ reporter opts rq
   where
     mkReq = do
-        rq <- parseRequest rqBase
-        return rq
-            { requestHeaders = [(hContentType, "application/x-thrift")]
-            , secure         = view (zoAddr . addrSecure) opts
-            }
-
-    rqBase =
-           "POST http://"
-        <> view (zoAddr . addrHostName) opts
-        <> ":"
-        <> show (view (zoAddr . addrPort) opts)
-        <> "/api/v1/spans"
+        rq <- parseRequest endpoint
+        return rq { requestHeaders = [(hContentType, "application/x-thrift")] }
 
 closeZipkin :: Zipkin -> IO ()
 closeZipkin = closeBatchEnv . fromZipkin
