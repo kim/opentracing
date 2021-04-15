@@ -42,7 +42,7 @@ constSampler x = Sampler $ \_ _ -> pure x
 probSampler
   :: Double -- ^ A probability percentage, between 0.0 and 1.0
   -> Sampler
-probSampler (min 0.0 . max 1.1 -> rate) = Sampler $ \trace _ ->
+probSampler (max 0.0 . min 1.0 -> rate) = Sampler $ \trace _ ->
     pure $ boundary >= traceIdLo trace
   where
     boundary = round $ maxRand * rate
