@@ -25,6 +25,8 @@ library
       OpenTracing.Zipkin.V2.HttpReporter
   other-modules:
       Paths_opentracing_zipkin_v2
+  autogen-modules:
+      Paths_opentracing_zipkin_v2
   ghc-options:
     -Wall
     -funbox-small-strict-fields

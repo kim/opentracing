@@ -25,6 +25,8 @@ library
       OpenTracing.Zipkin.Types
   other-modules:
       Paths_opentracing_zipkin_common
+  autogen-modules:
+      Paths_opentracing_zipkin_common
   ghc-options:
     -Wall
     -funbox-small-strict-fields

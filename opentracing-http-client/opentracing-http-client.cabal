@@ -24,6 +24,8 @@ library
       Network.HTTP.Client.OpenTracing
   other-modules:
       Paths_opentracing_http_client
+  autogen-modules:
+      Paths_opentracing_http_client
   ghc-options:
     -Wall
     -funbox-small-strict-fields

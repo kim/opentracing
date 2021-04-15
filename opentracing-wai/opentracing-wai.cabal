@@ -24,6 +24,8 @@ library
       Network.Wai.Middleware.OpenTracing
   other-modules:
       Paths_opentracing_wai
+  autogen-modules:
+      Paths_opentracing_wai
   ghc-options:
     -Wall
     -funbox-small-strict-fields

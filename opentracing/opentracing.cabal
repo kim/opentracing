@@ -37,6 +37,8 @@ library
       OpenTracing.Types
   other-modules:
       Paths_opentracing
+  autogen-modules:
+      Paths_opentracing
   ghc-options:
     -Wall
     -funbox-small-strict-fields
