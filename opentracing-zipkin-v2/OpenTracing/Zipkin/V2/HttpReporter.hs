@@ -60,7 +60,7 @@ newtype Zipkin = Zipkin { fromZipkin :: BatchEnv }
 data ZipkinOptions = ZipkinOptions
     { _zoManager       :: Manager
     , _zoLocalEndpoint :: Endpoint
-    , _zoAddr          :: Addr 'HTTP
+    , _zoEndpoint      :: String
     , _zoLogfmt        :: forall t. Foldable t => t LogField -> Builder -- == LogFieldsFormatter
     , _zoErrorLog      :: Builder -> IO ()
     }
@@ -71,13 +71,21 @@ zipkinOptions :: Manager -> Endpoint -> ZipkinOptions
 zipkinOptions mgr loc = ZipkinOptions
     { _zoManager       = mgr
     , _zoLocalEndpoint = loc
+    , _zoEndpoint      = defaultEndpoint
     , _zoAddr          = defaultZipkinAddr
     , _zoLogfmt        = jsonMap
     , _zoErrorLog      = defaultErrorLog
     }
+  where
+    addr = defaultZipkinAddr
+    defaultEndpoint = "http://"
+        <> addrHostName addr
+        <> ":"
+        <> show (addrPort addr)
+        <> "/api/v2/spans"
 
 newZipkin :: ZipkinOptions -> IO Zipkin
-newZipkin opts@ZipkinOptions{_zoErrorLog=errlog} = do
+newZipkin opts@ZipkinOptions{_zoEndpoint=endpoint, _zoErrorLog=errlog} = do
     rq <- mkReq
     fmap Zipkin
         . newBatchEnv
@@ -85,18 +93,11 @@ newZipkin opts@ZipkinOptions{_zoErrorLog=errlog} = do
         $ reporter opts rq
   where
     mkReq = do
-        rq <- parseRequest rqBase
+        rq <- parseRequest endpoint
         return rq
             { requestHeaders = [(hContentType, "application/json")]
             , secure         = view (zoAddr . addrSecure) opts
             }
-
-    rqBase =
-           "POST http://"
-        <> view (zoAddr . addrHostName) opts
-        <> ":"
-        <> show (view (zoAddr . addrPort) opts)
-        <> "/api/v2/spans"
 
 closeZipkin :: Zipkin -> IO ()
 closeZipkin = closeBatchEnv . fromZipkin
