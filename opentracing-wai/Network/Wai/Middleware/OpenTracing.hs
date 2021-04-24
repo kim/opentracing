@@ -31,7 +31,7 @@ opentracing
     -> Application
 opentracing t p app req respond = do
     let ctx = Propagation.extract p (requestHeaders req)
-    let opt = let name = Text.intercalate "/" (pathInfo req)
+    let opt = let name = Text.cons '/' (Text.intercalate "/" (pathInfo req))
                   refs = (\x -> set refPropagated x mempty)
                        . maybeToList . fmap ChildOf $ ctx
                in set spanOptSampled (view ctxSampled <$> ctx)
