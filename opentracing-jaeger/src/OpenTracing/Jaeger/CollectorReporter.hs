@@ -33,11 +33,12 @@ import           Control.Lens                   (makeLenses, set, view)
 import           Control.Monad                  (unless)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
+import           Data.ByteString.Lazy           (fromStrict)
 import           Data.ByteString.Builder
 import           Data.Monoid
 import           Data.Text                      (Text)
 import           Data.Vector                    (fromList)
-import qualified Jaeger_Types                   as Thrift
+import qualified Jaeger.Types                   as Thrift
 import           Network.HTTP.Client
 import           Network.HTTP.Types.Status
 import           OpenTracing.Jaeger.Propagation (jaegerPropagation)
@@ -46,9 +47,8 @@ import           OpenTracing.Reporting
 import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
-import           Thrift.Protocol.Binary
-import           Thrift.Transport.Empty
-
+import qualified Pinch
+import qualified Pinch.Client as Pinch
 
 newtype JaegerCollector = JaegerCollector { fromJaegerCollector :: BatchEnv }
 
@@ -125,7 +125,7 @@ reporter mgr errlog rq tproc (fromList -> spans) = do
               <> intDec (statusCode rs)
               <> char8 '\n'
   where
-    body = RequestBodyLBS . serializeBatch $ toThriftBatch tproc spans
+    body = RequestBodyLBS . fromStrict . serializeBatch $ toThriftBatch tproc spans
 
     -- nb. collector accepts 'BinaryProtocol', but agent 'CompactProtocol'
-    serializeBatch = Thrift.encode_Batch (BinaryProtocol EmptyTransport)
+    serializeBatch = Pinch.encode Pinch.binaryProtocol

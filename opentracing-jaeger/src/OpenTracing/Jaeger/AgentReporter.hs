@@ -27,7 +27,7 @@ module OpenTracing.Jaeger.AgentReporter
     )
 where
 
-import qualified Agent_Client                   as Thrift
+import qualified Agent.Client                   as Thrift
 import           Control.Exception.Safe
 import           Control.Lens                   (makeLenses, view)
 import           Control.Monad.IO.Class
@@ -35,42 +35,32 @@ import           Data.ByteString.Builder
 import           Data.Semigroup
 import           Data.Text                      (Text)
 import qualified Data.Vector                    as Vector
-import qualified Jaeger_Types                   as Thrift
+import qualified Jaeger.Types                   as Thrift
 import           Network.Socket
-import qualified Network.Socket.ByteString.Lazy as Net
 import           OpenTracing.Jaeger.Propagation (jaegerPropagation)
 import           OpenTracing.Jaeger.Thrift
 import           OpenTracing.Reporting          (defaultErrorLog)
 import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
-import qualified Thrift
-import qualified Thrift.Protocol.Compact        as Thrift
-import qualified Thrift.Transport.IOBuffer      as Thrift
-
+import qualified Pinch
+import qualified Pinch.Client as Pinch
+import qualified Pinch.Transport as Pinch
 
 data JaegerAgent = JaegerAgent
     { envLocalProcess :: Thrift.Process
     , envErrorLog     :: Builder -> IO ()
-    , envTransport    :: AgentTransport
+    , envClient       :: JaegerClient
     }
 
-data AgentTransport = AgentTransport
-    { transSock :: Socket
-    , transBuf  :: Thrift.WriteBuffer
-    }
+data JaegerClient = JaegerClient
+  {
+    jclClient :: Pinch.Client
+  , jclSocket :: Socket
+  }
 
-instance Thrift.Transport AgentTransport where
-    tIsOpen = const (pure True)
-    tWrite  = Thrift.writeBuf . transBuf
-
-    tFlush AgentTransport{..} =
-        Thrift.flushBuf transBuf >>= Net.sendAll transSock
-
-    tClose   = error "tClose undefined"
-    tRead    = error "tRead undefined"
-    tPeek    = error "tPeek undefined"
-    tReadAll = error "tReadAll undefined"
+instance Pinch.ThriftClient JaegerClient where
+  call JaegerClient{jclClient} = Pinch.call jclClient
 
 data JaegerAgentOptions = JaegerAgentOptions
     { _jaoServiceName :: Text
@@ -97,9 +87,9 @@ newJaegerAgent JaegerAgentOptions{..} =
      in JaegerAgent tproc _jaoErrorLog <$> openAgentTransport _jaoAddr
 
 closeJaegerAgent :: JaegerAgent -> IO ()
-closeJaegerAgent JaegerAgent{envTransport} =
-    handleAny (const (return ())) $
-        Thrift.tFlush envTransport *> Thrift.tClose envTransport
+closeJaegerAgent JaegerAgent{envClient=JaegerClient{jclSocket}} =
+  handleAny (const (return ())) $
+    close jclSocket
 
 withJaegerAgent
     :: ( MonadIO   m
@@ -111,24 +101,24 @@ withJaegerAgent
 withJaegerAgent opts =
     bracket (liftIO $ newJaegerAgent opts) (liftIO . closeJaegerAgent)
 
-openAgentTransport :: Addr 'UDP -> IO AgentTransport
+openAgentTransport :: Addr 'UDP -> IO JaegerClient
 openAgentTransport addr = do
     AddrInfo{..} : _ <- getAddrInfo (Just defaultHints { addrSocketType = Datagram })
                                     (Just . view addrHostName $ addr)
                                     (Just . show . view addrPort $ addr)
     sock <- socket addrFamily addrSocketType addrProtocol
     connect sock addrAddress
-    buf  <- Thrift.newWriteBuffer
-    return AgentTransport
-        { transSock = sock
-        , transBuf  = buf
-        }
+    channel <- Pinch.createChannel sock Pinch.unframedTransport Pinch.compactProtocol
+    return JaegerClient
+      {
+        jclClient = Pinch.client channel
+      , jclSocket = sock
+      }
 
 jaegerAgentReporter :: MonadIO m => JaegerAgent -> FinishedSpan -> m ()
 jaegerAgentReporter JaegerAgent{..} s = liftIO $ emit `catchAny` err
   where
-    proto = Thrift.CompactProtocol envTransport
-    emit  = Thrift.emitBatch (undefined, proto) batch
+    emit = Pinch.call envClient (Thrift.emitBatch batch)
     batch = toThriftBatch envLocalProcess (Vector.singleton s)
     err e = envErrorLog $ shortByteString "Jaeger Agent Thrift error: "
                        <> string8 (show e)

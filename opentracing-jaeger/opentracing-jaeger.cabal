@@ -27,13 +27,15 @@ library
       OpenTracing.Jaeger.Propagation
       OpenTracing.Jaeger.Thrift
   other-modules:
-      Jaeger_Consts
-      Jaeger_Types
-      Agent
-      Agent_Client
-      Agent_Types
-      Agent_Iface
-      Zipkincore_Types
+      Agent.Client
+      Agent.Server
+      Agent.Types
+      Jaeger.Client
+      Jaeger.Server
+      Jaeger.Types
+      Zipkincore.Types
+      Zipkincore.Server
+      Zipkincore.Types
   hs-source-dirs:
       src
       gen-src
@@ -58,7 +60,8 @@ library
     , opentracing >= 0.1
     , safe-exceptions >= 0.1
     , text >= 1.2
-    , thrift == 0.13.0
+    , pinch >= 0.4.0.0
+    , vector-instances
     , unordered-containers >= 0.2
     , vector >= 0.12
   default-language: Haskell2010

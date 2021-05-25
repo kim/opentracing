@@ -8,6 +8,7 @@ module OpenTracing.Jaeger.Thrift
     )
 where
 
+import           Data.ByteString.Lazy       (toStrict)
 import           Control.Lens
 import           Data.Bool                  (bool)
 import           Data.Foldable
@@ -20,7 +21,7 @@ import           Data.Vector                (Vector)
 import qualified Data.Vector                as Vector
 import           Data.Vector.Lens           (vector)
 import           GHC.Stack                  (prettyCallStack)
-import           Jaeger_Types
+import           Jaeger.Types
     ( Batch (..)
     , Log (..)
     , Process (..)
@@ -28,7 +29,7 @@ import           Jaeger_Types
     , SpanRef (..)
     , Tag (..)
     )
-import qualified Jaeger_Types               as Thrift
+import qualified Jaeger.Types               as Thrift
 import           OpenTracing.Log
 import           OpenTracing.Span
 import           OpenTracing.Tags
@@ -43,7 +44,7 @@ toThriftSpan s = Thrift.Span
     , span_spanId        = view (spanContext . to ctxSpanID') s
     , span_parentSpanId  = maybe 0 (ctxSpanID' . refCtx) . findParent
                          $ view spanRefs s
-    , span_operationName = view (spanOperation . lazy) s
+    , span_operationName = view spanOperation s
     , span_references    = view ( spanRefs
                                 . to (map toThriftSpanRef . toList)
                                 . vector
@@ -63,7 +64,6 @@ toThriftSpan s = Thrift.Span
                          . Vector.fromList
                          . foldr' (\r acc -> toThriftLog r : acc) []
                          $ view spanLogs s
-    , span_incomplete    = Just False
     }
 
 toThriftSpanRef :: Reference -> Thrift.SpanRef
@@ -85,18 +85,41 @@ toThriftTag :: Text -> TagVal -> Thrift.Tag
 -- acc. to https://github.com/opentracing/specification/blob/8d634bc7e3e73050f6ac1006858cddac8d9e0abe/semantic_conventions.yaml
 -- "http.status_code" is supposed to be integer-valued. Jaeger, however, drops
 -- the value (nb. _not_ the tag key) unless it is a string.
-toThriftTag HttpStatusCodeKey (IntT v) = Thrift.default_Tag
-    { tag_key  = view lazy HttpStatusCodeKey
-    , tag_vStr = Just . toLazyText . decimal $ v
+toThriftTag HttpStatusCodeKey (IntT v) = Thrift.Tag
+    { tag_key     = HttpStatusCodeKey
+    , tag_vType   = Thrift.STRING
+    , tag_vStr    = Just . view strict . toLazyText . decimal $ v
+    , tag_vDouble = Nothing
+    , tag_vBool   = Nothing
+    , tag_vLong   = Nothing
+    , tag_vBinary = Nothing
     }
 toThriftTag k v =
-    let t = Thrift.default_Tag { tag_key = view lazy k }
-     in case v of
-            BoolT   x -> t { tag_vBool   = Just x }
-            StringT x -> t { tag_vStr    = Just (view lazy x) }
-            IntT    x -> t { tag_vLong   = Just x }
-            DoubleT x -> t { tag_vDouble = Just x }
-            BinaryT x -> t { tag_vBinary = Just x }
+  Thrift.Tag
+  {
+    tag_key = k
+  , tag_vType = case v of
+      BoolT   _ -> Thrift.BOOL
+      StringT _ -> Thrift.STRING
+      IntT    _ -> Thrift.LONG
+      DoubleT _ -> Thrift.DOUBLE
+      BinaryT _ -> Thrift.BINARY
+  , tag_vStr = case v of
+      StringT x -> Just x
+      _ -> Nothing
+  , tag_vDouble = case v of
+      DoubleT x -> Just x
+      _ -> Nothing
+  , tag_vBool = case v of
+      BoolT x -> Just x
+      _ -> Nothing
+  , tag_vLong = case v of
+      IntT x -> Just x
+      _ -> Nothing
+  , tag_vBinary = case v of
+      BinaryT x -> Just (toStrict x)
+      _ -> Nothing
+  }
 
 toThriftLog :: LogRecord -> Thrift.Log
 toThriftLog r = Thrift.Log
@@ -118,7 +141,7 @@ toThriftLog r = Thrift.Log
 
 toThriftProcess :: Text -> Tags -> Thrift.Process
 toThriftProcess srv tags = Thrift.Process
-    { process_serviceName = view lazy srv
+    { process_serviceName = srv
     , process_tags        = Just $ toThriftTags tags
     }
 
@@ -126,6 +149,8 @@ toThriftBatch :: Thrift.Process -> Vector FinishedSpan -> Thrift.Batch
 toThriftBatch tproc spans = Thrift.Batch
     { batch_process = tproc
     , batch_spans   = toThriftSpan <$> spans
+    , batch_seqNo   = Nothing
+    , batch_stats   = Nothing
     }
 
 traceIdLo' :: SpanContext -> Int64
