@@ -18,6 +18,7 @@ import           Control.Lens
 import           Data.Bifunctor
 import           Data.Bits
 import           Data.ByteString.Builder
+import           Data.ByteString          (ByteString)
 import qualified Data.ByteString.Lazy     as Lazy
 import           Data.ByteString.Lens
 import           Data.Foldable            (foldl', toList)
@@ -26,7 +27,7 @@ import           Data.Int
 import qualified Data.IP                  as IP
 import           Data.List.NonEmpty       (NonEmpty (..))
 import           Data.Semigroup           ((<>))
-import           Data.Text.Lazy.Encoding  (decodeUtf8, encodeUtf8)
+import           Data.Text.Encoding       (decodeUtf8, encodeUtf8)
 import qualified Data.Vector              as Vector
 import           OpenTracing.Log
 import           OpenTracing.Span
@@ -34,12 +35,8 @@ import           OpenTracing.Tags
 import           OpenTracing.Time
 import           OpenTracing.Types
 import           OpenTracing.Zipkin.Types (Endpoint (..))
-import qualified Thrift
-import           Thrift.Protocol.Binary
-import           Thrift.Transport.Empty
-import           Thrift.Types
-import qualified ZipkinCore_Consts        as Thrift
-import           ZipkinCore_Types
+import qualified Pinch
+import           Zipkincore.Types
     ( Annotation (..)
     , BinaryAnnotation (..)
     , Span (..)
@@ -48,7 +45,7 @@ import           ZipkinCore_Types
     , endpoint_port
     , endpoint_service_name
     )
-import qualified ZipkinCore_Types         as Thrift
+import qualified Zipkincore.Types         as Thrift
 
 
 toThriftSpan
@@ -59,7 +56,7 @@ toThriftSpan
 toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
     { span_trace_id           = view (spanContext . to traceIdLo') s
     , span_trace_id_high      = view (spanContext . to traceIdHi') s
-    , span_name               = view (spanOperation . lazy) s
+    , span_name               = view spanOperation s
     , span_id                 = view (spanContext . to ctxSpanID') s
     , span_parent_id          = view (spanContext . to ctxParentSpanID') s
     , span_annotations        = annotations
@@ -94,7 +91,7 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
         go acc (k,v) =
             let (anntyp, annval) = toThriftTag v
                 ann              = Thrift.BinaryAnnotation
-                    { binaryAnnotation_key             = view lazy k
+                    { binaryAnnotation_key             = k
                     , binaryAnnotation_value           = annval
                     , binaryAnnotation_annotation_type = anntyp
                     , binaryAnnotation_host            = Just loc
@@ -118,36 +115,31 @@ toThriftSpan (toThriftEndpoint -> loc) logfmt s = Thrift.Span
             { annotation_timestamp = micros t
             , annotation_host      = Just loc
             , annotation_value     = case fs of
-                  (Event x :| []) -> view lazy x -- proper zipkin annotation
-                  fields          -> decodeUtf8 . toLazyByteString $ logfmt fields
+                  (Event x :| []) -> x -- proper zipkin annotation
+                  fields          -> decodeUtf8 . Lazy.toStrict . toLazyByteString $ logfmt fields
             }
             : acc
 
-thriftEncodeSpan :: Thrift.Span -> Lazy.ByteString
-thriftEncodeSpan = Thrift.encode_Span (BinaryProtocol EmptyTransport)
+thriftEncodeSpan :: Thrift.Span -> ByteString
+thriftEncodeSpan = Pinch.encode Pinch.binaryProtocol
 
-thriftEncodeSpans :: Traversable t => t Thrift.Span -> Lazy.ByteString
+thriftEncodeSpans :: Traversable t => t Thrift.Span -> ByteString
 thriftEncodeSpans
-    = thriftEncodeVal
-    . TList (T_STRUCT Thrift.typemap_Span)
-    . toList
-    . fmap Thrift.from_Span
+     = Pinch.encode Pinch.binaryProtocol
+     . toList
 
-thriftEncodeVal :: ThriftVal -> Lazy.ByteString
-thriftEncodeVal = Thrift.serializeVal (BinaryProtocol EmptyTransport)
-
-toThriftTag :: TagVal -> (Thrift.AnnotationType, Lazy.ByteString)
+toThriftTag :: TagVal -> (Thrift.AnnotationType, ByteString)
 toThriftTag (BoolT   v) = (Thrift.BOOL, if v then "1" else "0")
-toThriftTag (StringT v) = (Thrift.STRING, view (lazy . to encodeUtf8) v)
-toThriftTag (IntT    v) = (Thrift.I64, toLazyByteString . int64BE $ v)
-toThriftTag (DoubleT v) = (Thrift.DOUBLE, toLazyByteString . doubleBE $ v)
-toThriftTag (BinaryT v) = (Thrift.BYTES, v)
+toThriftTag (StringT v) = (Thrift.STRING, view (to encodeUtf8) v)
+toThriftTag (IntT    v) = (Thrift.I64, Lazy.toStrict . toLazyByteString . int64BE $ v)
+toThriftTag (DoubleT v) = (Thrift.DOUBLE, Lazy.toStrict . toLazyByteString . doubleBE $ v)
+toThriftTag (BinaryT v) = (Thrift.BYTES, Lazy.toStrict v)
 
 toThriftEndpoint :: Endpoint -> Thrift.Endpoint
 toThriftEndpoint Endpoint{..} = Thrift.Endpoint
     { endpoint_ipv4         = packIPv4 $ fromIPv4 ipv4
     , endpoint_port         = maybe 0 (fromIntegral . fromPort) port
-    , endpoint_service_name = view lazy serviceName
+    , endpoint_service_name = serviceName
     , endpoint_ipv6         = packIPv6 . fromIPv6 <$> ipv6
     }
   where
@@ -156,7 +148,7 @@ toThriftEndpoint Endpoint{..} = Thrift.Endpoint
         let [a,b,c,d] = IP.fromIPv4 ip
          in fromIntegral $ a `shiftL` 24 .|. b `shiftL` 16 .|. c `shiftL` 8 .|. d
 
-    packIPv6 :: IP.IPv6 -> Lazy.ByteString
+    packIPv6 :: IP.IPv6 -> ByteString
     packIPv6 = view packedBytes . map fromIntegral . IP.fromIPv6b
 
 

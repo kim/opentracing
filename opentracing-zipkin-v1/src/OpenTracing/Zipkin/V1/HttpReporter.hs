@@ -37,6 +37,7 @@ import Control.Monad                (unless)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.ByteString.Builder
+import Data.ByteString.Lazy         (fromStrict)
 import Data.Monoid
 import Network.HTTP.Client          hiding (port)
 import Network.HTTP.Types
@@ -115,6 +116,7 @@ reporter ZipkinOptions{..} rq spans = do
                     <> char8 '\n'
   where
     body = RequestBodyLBS
+         . fromStrict
          . thriftEncodeSpans
          . map (toThriftSpan _zoLocalEndpoint _zoLogfmt)
          $ spans
