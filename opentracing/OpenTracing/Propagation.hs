@@ -113,7 +113,7 @@ carrier
     => proxy c -- ^ Proxy for the carrier type @c@.
     -> r -- ^ The application context
     -> Prism' c SpanContext
-carrier _c = fromCarrier . view (propagation . rlens)
+carrier _c r = fromCarrier $ view (propagation . rlens) r
 
 -- | Serialize a `SpanContext` into the format `c` using a serializer from
 -- the application context.
