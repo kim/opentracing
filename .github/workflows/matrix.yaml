@@ -5,29 +5,20 @@ on: pull_request
 jobs:
   linux:
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.versions.allow-failure }}
     strategy:
       fail-fast: false
       matrix:
         versions:
-          # For historical purposes: the library was developed on GHC 8.0.2
-          - ghc: '8.0'
-            cabal: '3.4'
-            allow-failure: false
           # MSHV: three major versions
           - ghc: '8.6'
             cabal: '3.4'
-            allow-failure: false
           - ghc: '8.8'
             cabal: '3.4'
-            allow-failure: false
           - ghc: '8.10'
             cabal: '3.4'
-            allow-failure: false
-          # GHC 9 is a "super-major" release, needs some CPP
+          # Latest
           - ghc: '9.0'
             cabal: '3.4'
-            allow-failure: true
     steps:
     - uses: actions/checkout@v2
 
