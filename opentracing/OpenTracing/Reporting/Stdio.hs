@@ -18,7 +18,6 @@ import Data.Aeson                 (toEncoding)
 import Data.Aeson.Encoding
 import Data.ByteString.Lazy.Char8 (hPutStrLn)
 import Data.Foldable              (toList)
-import Data.Semigroup             ((<>))
 import GHC.Stack                  (prettyCallStack)
 import OpenTracing.Log
 import OpenTracing.Span

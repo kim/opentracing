@@ -39,7 +39,6 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.ByteString.Builder
-import Data.Semigroup
 import Data.Time                (NominalDiffTime)
 import Data.Word
 import OpenTracing.Span

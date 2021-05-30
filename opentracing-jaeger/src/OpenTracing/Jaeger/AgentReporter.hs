@@ -32,7 +32,6 @@ import           Control.Exception.Safe
 import           Control.Lens                   (makeLenses, view)
 import           Control.Monad.IO.Class
 import           Data.ByteString.Builder
-import           Data.Semigroup
 import           Data.Text                      (Text)
 import qualified Data.Vector                    as Vector
 import qualified Jaeger.Types                   as Thrift

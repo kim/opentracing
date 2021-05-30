@@ -15,7 +15,6 @@ where
 import           Control.Lens
 import           Data.Bits
 import qualified Data.HashMap.Strict     as HashMap
-import           Data.Monoid
 import           Data.Text               (Text, isPrefixOf)
 import qualified Data.Text               as Text
 import qualified Data.Text.Read          as Text

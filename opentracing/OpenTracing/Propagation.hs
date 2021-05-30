@@ -62,7 +62,6 @@ import qualified Data.CaseInsensitive    as CI
 import           Data.HashMap.Strict     (HashMap)
 import qualified Data.HashMap.Strict     as HashMap
 import           Data.Maybe              (catMaybes)
-import           Data.Monoid
 import           Data.Proxy
 import           Data.Text               (Text, isPrefixOf, toLower)
 import           Data.Text.Encoding      (decodeUtf8, encodeUtf8)

@@ -5,7 +5,6 @@ module Main where
 import Backends
 import Control.Concurrent     (threadDelay)
 import Control.Monad.IO.Class (liftIO)
-import Data.Semigroup         ((<>))
 import OpenTracing
 import Options.Applicative
 

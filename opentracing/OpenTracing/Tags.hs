@@ -90,7 +90,6 @@ import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HashMap
 import           Data.Int                    (Int64)
 import           Data.Monoid                 (First)
-import           Data.Semigroup              (Semigroup)
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
