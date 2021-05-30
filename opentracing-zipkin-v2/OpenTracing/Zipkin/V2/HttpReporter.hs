@@ -43,7 +43,6 @@ import qualified Data.ByteString.Base64.Lazy as B64
 import           Data.ByteString.Builder
 import           Data.Map.Lens               (toMapOf)
 import           Data.Maybe                  (catMaybes)
-import           Data.Monoid
 import           Data.Text.Lazy.Encoding     (decodeUtf8)
 import           Data.Text.Strict.Lens       (packed, utf8)
 import           Network.HTTP.Client

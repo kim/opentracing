@@ -11,7 +11,6 @@ module Backends
 where
 
 import           Control.Lens
-import           Data.Semigroup         ((<>))
 import           Data.Text              (Text)
 import           Network.HTTP.Client    (defaultManagerSettings, newManager)
 import           OpenTracing

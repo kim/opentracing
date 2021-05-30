@@ -26,7 +26,6 @@ import qualified Data.HashMap.Strict      as HashMap
 import           Data.Int
 import qualified Data.IP                  as IP
 import           Data.List.NonEmpty       (NonEmpty (..))
-import           Data.Semigroup           ((<>))
 import           Data.Text.Encoding       (decodeUtf8, encodeUtf8)
 import qualified Data.Vector              as Vector
 import           OpenTracing.Log

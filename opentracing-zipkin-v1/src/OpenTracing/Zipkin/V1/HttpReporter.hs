@@ -38,7 +38,6 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Data.ByteString.Builder
 import Data.ByteString.Lazy         (fromStrict)
-import Data.Monoid
 import Network.HTTP.Client          hiding (port)
 import Network.HTTP.Types
 import OpenTracing.Log

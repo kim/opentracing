@@ -11,7 +11,6 @@ import           Control.Applicative
 import           Control.Lens                 (over, set, view)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
-import           Data.Semigroup               ((<>))
 import qualified Data.Text                    as Text
 import           Data.Text.Encoding           (decodeUtf8)
 import           Network.HTTP.Client.Internal
