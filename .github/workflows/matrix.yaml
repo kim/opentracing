@@ -10,10 +10,6 @@ jobs:
       fail-fast: false
       matrix:
         versions:
-          # For historical purposes: the library was developed on GHC 8.0.2
-          - ghc: '8.0'
-            cabal: '3.4'
-            allow-failure: false
           # MSHV: three major versions
           - ghc: '8.6'
             cabal: '3.4'
