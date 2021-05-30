@@ -48,7 +48,6 @@ import           OpenTracing.Span
 import           OpenTracing.Tags
 import           OpenTracing.Types
 import qualified Pinch
-import qualified Pinch.Client as Pinch
 
 newtype JaegerCollector = JaegerCollector { fromJaegerCollector :: BatchEnv }
 
