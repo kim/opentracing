@@ -1,7 +1,7 @@
 cabal-version: 2.2
 
 name:           opentracing
-version:        0.1.0.0
+version:        0.2.0
 synopsis:       OpenTracing for Haskell
 homepage:       https://github.com/kim/opentracing
 bug-reports:    https://github.com/kim/opentracing/issues

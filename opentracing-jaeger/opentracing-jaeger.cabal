@@ -1,7 +1,7 @@
 cabal-version: 2.2
 
 name:           opentracing-jaeger
-version:        0.1.0.0
+version:        0.2.0
 synopsis:       Jaeger backend for OpenTracing
 homepage:       https://github.com/kim/opentracing
 bug-reports:    https://github.com/kim/opentracing/issues
@@ -35,7 +35,6 @@ library
       Jaeger.Types
       Zipkincore.Types
       Zipkincore.Server
-      Zipkincore.Types
   hs-source-dirs:
       src
       gen-src
