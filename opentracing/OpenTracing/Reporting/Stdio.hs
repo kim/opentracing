@@ -3,6 +3,7 @@ Module: OpenTracing.Reporting.Stdio
 
 Logging reporters that emit spans to stdout, stderr and System.IO `Handles`.
 -}
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module OpenTracing.Reporting.Stdio
@@ -16,6 +17,9 @@ import Control.Lens               (view)
 import Control.Monad.IO.Class
 import Data.Aeson                 (toEncoding)
 import Data.Aeson.Encoding
+#if MIN_VERSION_aeson(2, 0, 0)
+import qualified Data.Aeson.Key as Key
+#endif
 import Data.ByteString.Lazy.Char8 (hPutStrLn)
 import Data.Foldable              (toList)
 import GHC.Stack                  (prettyCallStack)
@@ -59,10 +63,16 @@ logRecE r = pairs $
     <> pair "fields" (list logFieldE . toList $ view logFields r)
 
 logFieldE :: LogField -> Encoding
-logFieldE f = pairs . pair (logFieldLabel f) $ case f of
+logFieldE f = pairs . pair key $ case f of
     Event      x -> text x
     Message    x -> text x
     Stack      x -> string . prettyCallStack $ x
     ErrKind    x -> text x
     ErrObj     x -> string . show $ x
     LogField _ x -> string . show $ x
+  where
+#if MIN_VERSION_aeson(2, 0, 0)
+    key = Key.fromText $ logFieldLabel f
+#else
+    key = logFieldLabel f
+#endif

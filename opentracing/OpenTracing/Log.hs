@@ -4,6 +4,7 @@ Module: OpenTracing.Log
 Logs are structured data that occur over the lifetime of a span.
 -}
 
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RankNTypes         #-}
@@ -31,6 +32,9 @@ import           Control.Exception
 import           Control.Lens            hiding ((.=))
 import           Data.Aeson
 import qualified Data.Aeson.Encoding     as Encoding
+#if MIN_VERSION_aeson(2, 0, 0)
+import qualified Data.Aeson.Key          as Key
+#endif
 import           Data.ByteString.Builder (Builder)
 import           Data.Foldable
 import           Data.List.NonEmpty      (NonEmpty)
@@ -84,8 +88,12 @@ type LogFieldsFormatter = forall t. Foldable t => t LogField -> Builder
 jsonAssoc :: LogFieldsFormatter
 jsonAssoc = Encoding.fromEncoding . Encoding.list go . toList
   where
-    go lf = Encoding.pairs $
-        Encoding.pair (logFieldLabel lf) (logFieldEncoding lf)
+    go lf = Encoding.pairs $ Encoding.pair (key lf) (logFieldEncoding lf)
+#if MIN_VERSION_aeson(2, 0, 0)
+    key lf = Key.fromText $ logFieldLabel lf
+#else
+    key lf = logFieldLabel lf
+#endif
 
 -- | A log formatter that encodes each `LogField` as an entry in a shared JSON object
 --
