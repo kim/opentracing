@@ -1,3 +1,7 @@
+* opentracing/0.2.1 (2021-11-08)
+
+  Support aeson 2.x (#39)
+
 * 0.2.0 (2021-06-03)
 
   - Drop support for GHC 8.0 (#35)
