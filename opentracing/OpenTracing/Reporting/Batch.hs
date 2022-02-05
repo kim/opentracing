@@ -20,6 +20,7 @@ module OpenTracing.Reporting.Batch
     , boptTimeoutSec
     , boptReporter
     , boptErrorLog
+    , boptQueueSize
 
     , defaultErrorLog
 
@@ -59,6 +60,7 @@ data BatchOptions = BatchOptions
     -- to _boptBatchSize. No default.
     , _boptErrorLog   :: Builder        -> IO ()
     -- ^ What to do with errors. Default print to stderr.
+    , _boptQueueSize  :: Maybe Word
     }
 
 -- | Default batch options which can be overridden via lenses.
@@ -68,6 +70,7 @@ batchOptions f = BatchOptions
     , _boptTimeoutSec = 5
     , _boptReporter   = f
     , _boptErrorLog   = defaultErrorLog
+    , _boptQueueSize  = Nothing
     }
 
 -- | An error logging function which prints to stderr.
@@ -79,8 +82,10 @@ makeLenses ''BatchOptions
 
 -- | The environment of a batch reporter.
 data BatchEnv = BatchEnv
-    { envQ   :: TQueue FinishedSpan
-    -- ^ The queue of spans to be reported
+    { envEnqueue :: FinishedSpan -> IO ()
+    -- ^ Enqueue a span to the backing queue. Depending on the backing 
+    -- queue this function might block until there is room to enqueue 
+    -- the span.
     , envRep :: Async ()
     -- ^ Asynchronous consumer of the queue
     }
@@ -88,8 +93,20 @@ data BatchEnv = BatchEnv
 -- | Create a new batch environment
 newBatchEnv :: BatchOptions -> IO BatchEnv
 newBatchEnv opt = do
-    q <- newTQueueIO
-    BatchEnv q <$> consumer opt q
+    (readQ, tryReadQ, writeQ) <- case _boptQueueSize opt of
+        Just maxQueueSize -> do
+            q <- newTBQueueIO (fromIntegral maxQueueSize)
+            pure ( readTBQueue q
+                 , tryReadTBQueue q
+                 , writeTBQueue q
+                 )
+        Nothing -> do
+            q <- newTQueueIO
+            pure ( readTQueue q
+                 , tryReadTQueue q
+                 , writeTQueue q
+                 )
+    BatchEnv (atomically . writeQ) <$> consumer opt readQ tryReadQ
 
 -- | Close a batch reporter, stop consuming any new spans. Any
 -- spans in the queue will be drained.
@@ -99,18 +116,18 @@ closeBatchEnv = cancel . envRep
 -- | An implementation of `OpenTracing.Tracer.tracerReport` that batches the finished
 -- spans for transimission to their destination.
 batchReporter :: MonadIO m => BatchEnv -> FinishedSpan -> m ()
-batchReporter BatchEnv{envQ} = liftIO . atomically . writeTQueue envQ
+batchReporter BatchEnv{envEnqueue} = liftIO . envEnqueue
 
-consumer :: BatchOptions -> TQueue FinishedSpan -> IO (Async ())
-consumer opt@BatchOptions{..} q = async . forever $ do
+consumer :: BatchOptions -> STM FinishedSpan -> STM (Maybe FinishedSpan) -> IO (Async ())
+consumer opt@BatchOptions{..} readQ tryReadQ = async . forever $ do
     xs <- popBlocking
     go False xs
   where
     popBlocking = atomically $ do
-        x <- readTQueue q
-        (x:) <$> pop (_boptBatchSize - 1) q
+        x <- readQ
+        (x:) <$> pop (_boptBatchSize - 1) tryReadQ
 
-    popNonblock = atomically $ pop _boptBatchSize q
+    popNonblock = atomically $ pop _boptBatchSize tryReadQ
 
     go _     []    = pure ()
     go True  batch = report batch *> drain
@@ -138,13 +155,13 @@ consumer opt@BatchOptions{..} q = async . forever $ do
     timeoutMicros = micros @NominalDiffTime $ fromIntegral _boptTimeoutSec
 
 
-pop :: Word16 -> TQueue a -> STM [a]
+pop :: Word16 -> STM (Maybe a) -> STM [a]
 pop 0 _ = pure []
-pop n q = do
-    v <- tryReadTQueue q
+pop n tryReadQ = do
+    v <- tryReadQ
     case v of
         Nothing -> pure []
-        Just v' -> (v' :) <$> pop (n-1) q
+        Just v' -> (v' :) <$> pop (n-1) tryReadQ
 
 data Err
     = ErrReporterException      SomeException
