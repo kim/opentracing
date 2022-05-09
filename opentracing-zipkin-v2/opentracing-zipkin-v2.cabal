@@ -1,7 +1,7 @@
 cabal-version: 2.2
 
 name:           opentracing-zipkin-v2
-version:        0.2.0
+version:        0.2.2
 synopsis:       Zipkin V2 backend for OpenTracing
 homepage:       https://github.com/kim/opentracing
 bug-reports:    https://github.com/kim/opentracing/issues

@@ -1,7 +1,7 @@
 cabal-version: 2.2
 
 name:           opentracing-zipkin-common
-version:        0.2.0
+version:        0.2.2
 synopsis:       Zipkin OpenTracing Backend Commons
 description:    Commons for the @opentracing-zipkin-v1@ and @opentracing-zipkin-v2@ packages
 homepage:       https://github.com/kim/opentracing

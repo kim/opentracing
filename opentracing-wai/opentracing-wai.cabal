@@ -1,7 +1,7 @@
 cabal-version: 2.2
 
 name:           opentracing-wai
-version:        0.2.0
+version:        0.2.2
 synopsis:       Middleware adding OpenTracing tracing for WAI applications
 homepage:       https://github.com/kim/opentracing
 bug-reports:    https://github.com/kim/opentracing/issues
