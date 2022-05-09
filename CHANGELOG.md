@@ -1,3 +1,9 @@
+* 0.2.2 (2022-05-09)
+
+  Support for base 4.16 / GHC 9.2
+
+  GHC versions below 8.10 are no longer tested in CI.
+
 * opentracing/0.2.1 (2021-11-08)
 
   Support aeson 2.x (#39)
