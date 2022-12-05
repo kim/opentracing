@@ -33,12 +33,13 @@ import           Control.Lens                   (makeLenses, set, view)
 import           Control.Monad                  (unless)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
-import           Data.ByteString.Lazy           (fromStrict)
 import           Data.ByteString.Builder
+import           Data.ByteString.Lazy           (fromStrict)
 import           Data.Text                      (Text)
 import           Data.Vector                    (fromList)
 import qualified Jaeger.Types                   as Thrift
 import           Network.HTTP.Client
+import           Network.HTTP.Types             (hContentType)
 import           Network.HTTP.Types.Status
 import           OpenTracing.Jaeger.Propagation (jaegerPropagation)
 import           OpenTracing.Jaeger.Thrift
@@ -86,7 +87,11 @@ newJaegerCollector opt@JaegerCollectorOptions{..} = do
                    <> ":"
                    <> show (view (jcoAddr . addrPort) opt)
                    <> "/api/traces?format=jaeger.thrift"
-        pure rq { method = "POST", secure = view (jcoAddr . addrSecure) opt }
+        pure rq
+            { method = "POST"
+            , secure = view (jcoAddr . addrSecure) opt
+            , requestHeaders = [(hContentType, "application/x-thrift")]
+            }
 
     tproc = toThriftProcess _jcoServiceName _jcoServiceTags
 
