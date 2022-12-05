@@ -33,7 +33,6 @@ import           Control.Lens                   (makeLenses, set, view)
 import           Control.Monad                  (unless)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
-import           Data.ByteString.Lazy           (fromStrict)
 import           Data.ByteString.Builder
 import           Data.Text                      (Text)
 import           Data.Vector                    (fromList)
@@ -117,13 +116,13 @@ reporter
     -> [FinishedSpan]
     -> IO ()
 reporter mgr errlog rq tproc (fromList -> spans) = do
-    rs <- responseStatus <$> httpLbs rq { requestBody = body } mgr
+    rs <- responseStatus <$> httpNoBody rq { requestBody = body } mgr
     unless (statusIsSuccessful rs) $
         errlog $ shortByteString "Error from Jaeger Collector: "
               <> intDec (statusCode rs)
               <> char8 '\n'
   where
-    body = RequestBodyLBS . fromStrict . serializeBatch $ toThriftBatch tproc spans
+    body = RequestBodyBS . serializeBatch $ toThriftBatch tproc spans
 
     -- nb. collector accepts 'BinaryProtocol', but agent 'CompactProtocol'
     serializeBatch = Pinch.encode Pinch.binaryProtocol
