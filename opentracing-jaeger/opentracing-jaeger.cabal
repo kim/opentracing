@@ -6,8 +6,8 @@ synopsis:       Jaeger backend for OpenTracing
 homepage:       https://github.com/kim/opentracing
 bug-reports:    https://github.com/kim/opentracing/issues
 author:         Kim Altintop
-maintainer:     Kim Altintop <kim.altintop+opentracing@gmail.com>
-copyright:      Copyright (c) 2017-2018 Kim Altintop
+maintainer:     Kim Altintop <kim@eagain.io>
+copyright:      Copyright (c) 2017-2022 Kim Altintop
 license:        Apache-2.0
 license-file:   LICENSE
 build-type:     Simple
