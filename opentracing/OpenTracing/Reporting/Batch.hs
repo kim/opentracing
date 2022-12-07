@@ -16,10 +16,14 @@ before sending them to their destination in bulk.
 module OpenTracing.Reporting.Batch
     ( BatchOptions
     , batchOptions
+    , boptAtCapacity
     , boptBatchSize
-    , boptTimeoutSec
-    , boptReporter
     , boptErrorLog
+    , boptQueueSize
+    , boptReporter
+    , boptTimeoutSec
+
+    , AtCapacity (..)
 
     , defaultErrorLog
 
@@ -31,20 +35,21 @@ module OpenTracing.Reporting.Batch
     )
 where
 
-import Control.Concurrent.Async
-import Control.Concurrent.STM
-import Control.Exception        (AsyncException (ThreadKilled))
-import Control.Exception.Safe
-import Control.Lens
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.ByteString.Builder
-import Data.Time                (NominalDiffTime)
-import Data.Word
-import OpenTracing.Span
-import OpenTracing.Time
-import System.IO                (stderr)
-import System.Timeout
+import           Control.Concurrent.Async
+import           Control.Concurrent.STM
+import           Control.Exception        (AsyncException (ThreadKilled))
+import           Control.Exception.Safe
+import           Control.Lens
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Data.ByteString.Builder
+import           Data.Time                (NominalDiffTime)
+import           Data.Word
+import           Numeric.Natural          (Natural)
+import           OpenTracing.Span
+import           OpenTracing.Time
+import           System.IO                (stderr)
+import           System.Timeout
 
 -- | Options available to construct a batch reporter. Default options are
 -- available with `batchOptions`
@@ -59,7 +64,14 @@ data BatchOptions = BatchOptions
     -- to _boptBatchSize. No default.
     , _boptErrorLog   :: Builder        -> IO ()
     -- ^ What to do with errors. Default print to stderr.
+    , _boptQueueSize  :: Natural
+    -- ^ Size of the queue holding batched spans. Default 1000
+    , _boptAtCapacity :: AtCapacity
+    -- ^ What to do when the queue is at capacity. Default: Drop
     }
+
+-- | Policy to apply to new spans when the internal queue is at capacity.
+data AtCapacity = Drop | Block
 
 -- | Default batch options which can be overridden via lenses.
 batchOptions :: ([FinishedSpan] -> IO ()) -> BatchOptions
@@ -68,6 +80,8 @@ batchOptions f = BatchOptions
     , _boptTimeoutSec = 5
     , _boptReporter   = f
     , _boptErrorLog   = defaultErrorLog
+    , _boptQueueSize  = 1000
+    , _boptAtCapacity = Drop
     }
 
 -- | An error logging function which prints to stderr.
@@ -76,38 +90,67 @@ defaultErrorLog = hPutBuilder stderr
 
 makeLenses ''BatchOptions
 
-
 -- | The environment of a batch reporter.
 data BatchEnv = BatchEnv
-    { envQ   :: TQueue FinishedSpan
+    { envQ   :: TBQueue FinishedSpan
     -- ^ The queue of spans to be reported
     , envRep :: Async ()
     -- ^ Asynchronous consumer of the queue
+    , envCap :: AtCapacity
+    -- ^ Policy to apply when the queue is at capacity
+    , envLog :: Builder -> IO ()
+    -- ^ Where to report errors
     }
 
 -- | Create a new batch environment
 newBatchEnv :: BatchOptions -> IO BatchEnv
 newBatchEnv opt = do
-    q <- newTQueueIO
-    BatchEnv q <$> consumer opt q
+    q <- newTBQueueIO (_boptQueueSize opt)
+    c <- consumer opt q
+    pure BatchEnv
+        { envQ = q
+        , envRep = c
+        , envCap = _boptAtCapacity opt
+        , envLog = _boptErrorLog opt
+        }
 
 -- | Close a batch reporter, stop consuming any new spans. Any
 -- spans in the queue will be drained.
 closeBatchEnv :: BatchEnv -> IO ()
 closeBatchEnv = cancel . envRep
 
--- | An implementation of `OpenTracing.Tracer.tracerReport` that batches the finished
--- spans for transimission to their destination.
+-- | An implementation of `OpenTracing.Tracer.tracerReport` that batches the
+-- finished spans for transimission to their destination.
+--
+-- If the underlying queue is currently at capacity, the behaviour depends on
+-- the setting of `boptAtCapacity`: if the value is `Drop`, `fspan` is dropped,
+-- otherwise, if the value is `Block`, the reporter will block until the queue
+-- has enough space to accept the span.
+--
+--  In either case, a log record is emitted.
 batchReporter :: MonadIO m => BatchEnv -> FinishedSpan -> m ()
-batchReporter BatchEnv{envQ} = liftIO . atomically . writeTQueue envQ
+batchReporter BatchEnv{envCap = Block, envQ, envLog} fspan = liftIO $ do
+    full <- atomically $ isFullTBQueue envQ
+    when full $
+        envLog "Queue at capacity, enqueueing span may block\n"
+    atomically $ writeTBQueue envQ fspan
 
-consumer :: BatchOptions -> TQueue FinishedSpan -> IO (Async ())
+batchReporter BatchEnv{envCap = Drop, envQ, envLog} fspan = liftIO $ do
+    full <- atomically $ do
+        full <- isFullTBQueue envQ
+        unless full $
+            writeTBQueue envQ fspan
+        pure full
+    when full $
+        envLog "Queue at capacity, span was dropped\n"
+
+consumer :: BatchOptions -> TBQueue FinishedSpan -> IO (Async ())
 consumer opt@BatchOptions{..} q = async . forever $ do
     xs <- popBlocking
     go False xs
   where
     popBlocking = atomically $ do
-        x <- readTQueue q
+        x <- readTBQueue q
         (x:) <$> pop (_boptBatchSize - 1) q
 
     popNonblock = atomically $ pop _boptBatchSize q
@@ -138,10 +181,10 @@ consumer opt@BatchOptions{..} q = async . forever $ do
     timeoutMicros = micros @NominalDiffTime $ fromIntegral _boptTimeoutSec
 
 
-pop :: Word16 -> TQueue a -> STM [a]
+pop :: Word16 -> TBQueue a -> STM [a]
 pop 0 _ = pure []
 pop n q = do
-    v <- tryReadTQueue q
+    v <- tryReadTBQueue q
     case v of
         Nothing -> pure []
         Just v' -> (v' :) <$> pop (n-1) q
