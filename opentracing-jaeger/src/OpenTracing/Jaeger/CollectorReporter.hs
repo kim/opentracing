@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE StrictData        #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE ViewPatterns      #-}
 
@@ -122,13 +123,13 @@ reporter
     -> [FinishedSpan]
     -> IO ()
 reporter mgr errlog rq tproc (fromList -> spans) = do
-    rs <- responseStatus <$> httpLbs rq { requestBody = body } mgr
+    rs <- responseStatus <$> httpNoBody rq { requestBody = body } mgr
     unless (statusIsSuccessful rs) $
         errlog $ shortByteString "Error from Jaeger Collector: "
               <> intDec (statusCode rs)
               <> char8 '\n'
   where
-    body = RequestBodyLBS . fromStrict . serializeBatch $ toThriftBatch tproc spans
+    body = RequestBodyBS . serializeBatch $ toThriftBatch tproc spans
 
     -- nb. collector accepts 'BinaryProtocol', but agent 'CompactProtocol'
     serializeBatch = Pinch.encode Pinch.binaryProtocol
