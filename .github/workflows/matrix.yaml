@@ -12,11 +12,11 @@ jobs:
           # MSHV: three major versions
           - ghc: '8.10.7'
             cabal: '3.4'
-          - ghc: '9.0.2'
-            cabal: '3.4'
-          # Latest
-          - ghc: '9.2.2'
+          - ghc: '9.2.7'
             cabal: '3.6'
+          # Latest
+          - ghc: '9.4.5'
+            cabal: '3.10'
     steps:
     - uses: actions/checkout@v2
 
