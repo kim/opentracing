@@ -12,7 +12,6 @@ where
 
 import           Control.Lens
 import           Data.Text              (Text)
-import           Network.HTTP.Client    (defaultManagerSettings, newManager)
 import           OpenTracing
 import           OpenTracing.Jaeger
 import           OpenTracing.Standard
