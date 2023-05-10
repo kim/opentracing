@@ -35,7 +35,6 @@ import           Control.Monad                  (unless)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Data.ByteString.Builder
-import           Data.ByteString.Lazy           (fromStrict)
 import           Data.Text                      (Text)
 import           Data.Vector                    (fromList)
 import qualified Jaeger.Types                   as Thrift
