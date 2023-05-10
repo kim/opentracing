@@ -2,11 +2,10 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE ViewPatterns               #-}
-
-{-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
 
 module OpenTracing.Tags
     ( Tags(fromTags)
@@ -90,6 +89,7 @@ import           Data.HashMap.Strict         (HashMap)
 import qualified Data.HashMap.Strict         as HashMap
 import           Data.Int                    (Int64)
 import           Data.Monoid                 (First)
+import           Data.String                 (IsString)
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
@@ -98,6 +98,43 @@ import           Data.Word                   (Word8)
 import           Network.HTTP.Types
 import           OpenTracing.Types
 import           Text.Read                   (readMaybe)
+
+pattern ComponentKey :: forall a. (Eq a, IsString a) => a
+pattern DbInstanceKey :: forall a. (Eq a, IsString a) => a
+pattern DbStatementKey :: forall a. (Eq a, IsString a) => a
+pattern DbTypeKey :: forall a. (Eq a, IsString a) => a
+pattern DbUserKey :: forall a. (Eq a, IsString a) => a
+pattern ErrorKey :: forall a. (Eq a, IsString a) => a
+pattern HttpMethodKey :: forall a. (Eq a, IsString a) => a
+pattern HttpStatusCodeKey :: forall a. (Eq a, IsString a) => a
+pattern HttpUrlKey :: forall a. (Eq a, IsString a) => a
+pattern MessageBusDestinationKey :: forall a. (Eq a, IsString a) => a
+pattern PeerAddressKey :: forall a. (Eq a, IsString a) => a
+pattern PeerHostnameKey :: forall a. (Eq a, IsString a) => a
+pattern PeerIPv4Key :: forall a. (Eq a, IsString a) => a
+pattern PeerIPv6Key :: forall a. (Eq a, IsString a) => a
+pattern PeerPortKey :: forall a. (Eq a, IsString a) => a
+pattern PeerServiceKey :: forall a. (Eq a, IsString a) => a
+pattern SamplingPriorityKey :: forall a. (Eq a, IsString a) => a
+pattern SpanKindKey :: forall a. (Eq a, IsString a) => a
+pattern Component :: Text -> Tag
+pattern DbInstance :: Text -> Tag
+pattern DbStatement :: Text -> Tag
+pattern DbType :: Text -> Tag
+pattern DbUser :: Text -> Tag
+pattern Error :: Bool -> Tag
+pattern HttpUrl :: Text -> Tag
+pattern MessageBusDestination :: Text -> Tag
+pattern PeerAddress :: Text -> Tag
+pattern PeerHostname :: Text -> Tag
+pattern PeerService :: Text -> Tag
+pattern HttpMethod :: Method -> Tag
+pattern HttpStatusCode :: Status -> Tag
+pattern PeerIPv4 :: IPv4 -> Tag
+pattern PeerIPv6 :: IPv6 -> Tag
+pattern PeerPort :: Port -> Tag
+pattern SamplingPriority :: Word8 -> Tag
+pattern SpanKind :: SpanKinds -> Tag
 
 -- | Tags are structured data associated with a `OpenTracing.Span.Span`. They can give
 -- a more complete picture of what a Span is doing than the operation alone. Tags
