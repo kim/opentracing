@@ -6,7 +6,7 @@
 {-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE ViewPatterns               #-}
 
-{-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
+{-# OPTIONS_GHC -Wno-missing-pattern-synonym-signatures #-}
 
 module OpenTracing.Tags
     ( Tags(fromTags)

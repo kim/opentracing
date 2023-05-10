@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports -fno-warn-name-shadowing -fno-warn-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-imports -Wno-name-shadowing -Wno-unused-matches #-}
 
 module Agent.Types where
 
