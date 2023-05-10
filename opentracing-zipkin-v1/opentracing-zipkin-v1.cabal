@@ -40,7 +40,7 @@ library
     -Wnoncanonical-monad-instances
   build-depends:
       QuickCheck >= 2.14
-    , base >= 4.9 && < 4.17
+    , base >= 4.9 && < 4.18
     , bytestring >= 0.10
     , exceptions >= 0.8
     , hashable >= 1.2
