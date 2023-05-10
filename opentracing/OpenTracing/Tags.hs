@@ -99,43 +99,6 @@ import           Network.HTTP.Types
 import           OpenTracing.Types
 import           Text.Read                   (readMaybe)
 
-pattern ComponentKey :: forall a. (Eq a, IsString a) => a
-pattern DbInstanceKey :: forall a. (Eq a, IsString a) => a
-pattern DbStatementKey :: forall a. (Eq a, IsString a) => a
-pattern DbTypeKey :: forall a. (Eq a, IsString a) => a
-pattern DbUserKey :: forall a. (Eq a, IsString a) => a
-pattern ErrorKey :: forall a. (Eq a, IsString a) => a
-pattern HttpMethodKey :: forall a. (Eq a, IsString a) => a
-pattern HttpStatusCodeKey :: forall a. (Eq a, IsString a) => a
-pattern HttpUrlKey :: forall a. (Eq a, IsString a) => a
-pattern MessageBusDestinationKey :: forall a. (Eq a, IsString a) => a
-pattern PeerAddressKey :: forall a. (Eq a, IsString a) => a
-pattern PeerHostnameKey :: forall a. (Eq a, IsString a) => a
-pattern PeerIPv4Key :: forall a. (Eq a, IsString a) => a
-pattern PeerIPv6Key :: forall a. (Eq a, IsString a) => a
-pattern PeerPortKey :: forall a. (Eq a, IsString a) => a
-pattern PeerServiceKey :: forall a. (Eq a, IsString a) => a
-pattern SamplingPriorityKey :: forall a. (Eq a, IsString a) => a
-pattern SpanKindKey :: forall a. (Eq a, IsString a) => a
-pattern Component :: Text -> Tag
-pattern DbInstance :: Text -> Tag
-pattern DbStatement :: Text -> Tag
-pattern DbType :: Text -> Tag
-pattern DbUser :: Text -> Tag
-pattern Error :: Bool -> Tag
-pattern HttpUrl :: Text -> Tag
-pattern MessageBusDestination :: Text -> Tag
-pattern PeerAddress :: Text -> Tag
-pattern PeerHostname :: Text -> Tag
-pattern PeerService :: Text -> Tag
-pattern HttpMethod :: Method -> Tag
-pattern HttpStatusCode :: Status -> Tag
-pattern PeerIPv4 :: IPv4 -> Tag
-pattern PeerIPv6 :: IPv6 -> Tag
-pattern PeerPort :: Port -> Tag
-pattern SamplingPriority :: Word8 -> Tag
-pattern SpanKind :: SpanKinds -> Tag
-
 -- | Tags are structured data associated with a `OpenTracing.Span.Span`. They can give
 -- a more complete picture of what a Span is doing than the operation alone. Tags
 -- apply to the entire timerange of a Span. Use `OpenTracing.Log.LogField` for
@@ -177,6 +140,26 @@ getTag k = HashMap.lookup k . fromTags
 getTagReify :: Getting (First b) Tag b -> Text -> Tags -> Maybe b
 getTagReify p k ts = getTag k ts >>= preview p . (k,)
 
+pattern
+      ComponentKey
+    , DbInstanceKey
+    , DbStatementKey
+    , DbTypeKey
+    , DbUserKey
+    , ErrorKey
+    , HttpMethodKey
+    , HttpStatusCodeKey
+    , HttpUrlKey
+    , MessageBusDestinationKey
+    , PeerAddressKey
+    , PeerHostnameKey
+    , PeerIPv4Key
+    , PeerIPv6Key
+    , PeerPortKey
+    , PeerServiceKey
+    , SamplingPriorityKey
+    , SpanKindKey
+    :: forall a. (Eq a, IsString a) => a
 
 pattern ComponentKey             = "component"
 pattern DbInstanceKey            = "db.instance"
@@ -202,6 +185,7 @@ _Component = prism' ((ComponentKey,) . StringT) $ \case
     (k, StringT v) | k == ComponentKey -> Just v
     _ -> Nothing
 
+pattern Component :: Text -> Tag
 pattern Component v <- (preview _Component -> Just v) where
     Component v = review _Component v
 
@@ -210,6 +194,7 @@ _DbInstance = prism' ((DbInstanceKey,) . StringT) $ \case
     (k, StringT v) | k == DbInstanceKey -> Just v
     _ -> Nothing
 
+pattern DbInstance :: Text -> Tag
 pattern DbInstance v <- (preview _DbInstance -> Just v) where
     DbInstance v = review _DbInstance v
 
@@ -218,6 +203,7 @@ _DbStatement = prism' ((DbStatementKey,) . StringT) $ \case
     (k, StringT v) | k == DbStatementKey -> Just v
     _ -> Nothing
 
+pattern DbStatement :: Text -> Tag
 pattern DbStatement v <- (preview _DbStatement -> Just v) where
     DbStatement v = review _DbStatement v
 
@@ -226,6 +212,7 @@ _DbType = prism' ((DbTypeKey,) . StringT) $ \case
     (k, StringT v) | k == DbTypeKey -> Just v
     _ -> Nothing
 
+pattern DbType :: Text -> Tag
 pattern DbType v <- (preview _DbType -> Just v) where
     DbType v = review _DbType v
 
@@ -234,6 +221,7 @@ _DbUser = prism' ((DbUserKey,) . StringT) $ \case
     (k, StringT v) | k == DbUserKey -> Just v
     _ -> Nothing
 
+pattern DbUser :: Text -> Tag
 pattern DbUser v <- (preview _DbUser -> Just v) where
     DbUser v = review _DbUser v
 
@@ -242,6 +230,7 @@ _Error = prism' ((ErrorKey,) . BoolT) $ \case
     (k, BoolT v) | k == ErrorKey -> Just v
     _ -> Nothing
 
+pattern Error :: Bool -> Tag
 pattern Error v <- (preview _Error -> Just v) where
     Error v = review _Error v
 
@@ -250,6 +239,7 @@ _HttpUrl = prism' ((HttpUrlKey,) . StringT) $ \case
     (k, StringT v) | k == HttpUrlKey -> Just v
     _ -> Nothing
 
+pattern HttpUrl :: Text -> Tag
 pattern HttpUrl v <- (preview _HttpUrl -> Just v) where
     HttpUrl v = review _HttpUrl v
 
@@ -258,6 +248,7 @@ _MessageBusDestination = prism' ((MessageBusDestinationKey,) . StringT) $ \case
     (k, StringT v) | k == MessageBusDestinationKey -> Just v
     _ -> Nothing
 
+pattern MessageBusDestination :: Text -> Tag
 pattern MessageBusDestination v <- (preview _MessageBusDestination -> Just v) where
     MessageBusDestination v = review _MessageBusDestination v
 
@@ -266,6 +257,7 @@ _PeerAddress = prism' ((PeerAddressKey,) . StringT) $ \case
     (k, StringT v) | k == PeerAddressKey -> Just v
     _ -> Nothing
 
+pattern PeerAddress :: Text -> Tag
 pattern PeerAddress v <- (preview _PeerAddress -> Just v) where
     PeerAddress v = review _PeerAddress v
 
@@ -274,6 +266,7 @@ _PeerHostname = prism' ((PeerHostnameKey,) . StringT) $ \case
     (k, StringT v) | k == PeerHostnameKey -> Just v
     _ -> Nothing
 
+pattern PeerHostname :: Text -> Tag
 pattern PeerHostname v <- (preview _PeerHostname -> Just v) where
     PeerHostname v = review _PeerHostname v
 
@@ -282,6 +275,7 @@ _PeerService = prism' ((PeerServiceKey,) . StringT) $ \case
     (k, StringT v) | k == PeerServiceKey -> Just v
     _ -> Nothing
 
+pattern PeerService :: Text -> Tag
 pattern PeerService v <- (preview _PeerService -> Just v) where
     PeerService v = review _PeerService v
 
@@ -291,6 +285,7 @@ _HttpMethod = prism' ((HttpMethodKey,) . StringT . decodeUtf8) $ \case
         either (const Nothing) (const (Just x)) $ parseMethod x
     _ -> Nothing
 
+pattern HttpMethod :: Method -> Tag
 pattern HttpMethod v <- (preview _HttpMethod -> Just v) where
     HttpMethod v = review _HttpMethod v
 
@@ -299,6 +294,7 @@ _HttpStatusCode = prism' ((HttpStatusCodeKey,) . IntT . fromIntegral . statusCod
     (k, IntT x) | k == HttpStatusCodeKey -> Just . toEnum . fromIntegral $ x
     _ -> Nothing
 
+pattern HttpStatusCode :: Status -> Tag
 pattern HttpStatusCode v <- (preview _HttpStatusCode -> Just v) where
     HttpStatusCode v = review _HttpStatusCode v
 
@@ -307,6 +303,7 @@ _PeerIPv4 = prism' ((PeerIPv4Key,) . StringT . Text.pack . show) $ \case
     (k, StringT x) | k == PeerIPv4Key -> readMaybe (Text.unpack x)
     _ -> Nothing
 
+pattern PeerIPv4 :: IPv4 -> Tag
 pattern PeerIPv4 v <- (preview _PeerIPv4 -> Just v) where
     PeerIPv4 v = review _PeerIPv4 v
 
@@ -315,6 +312,7 @@ _PeerIPv6 = prism' ((PeerIPv6Key,) . StringT . Text.pack . show) $ \case
     (k, StringT x) | k == PeerIPv6Key -> readMaybe (Text.unpack x)
     _ -> Nothing
 
+pattern PeerIPv6 :: IPv6 -> Tag
 pattern PeerIPv6 v <- (preview _PeerIPv6 -> Just v) where
     PeerIPv6 v = review _PeerIPv6 v
 
@@ -323,6 +321,7 @@ _PeerPort = prism' ((PeerPortKey,) . IntT . fromIntegral . fromPort) $ \case
     (k, IntT x) | k == PeerPortKey -> Just . toEnum . fromIntegral $ x
     _ -> Nothing
 
+pattern PeerPort :: Port -> Tag
 pattern PeerPort v <- (preview _PeerPort -> Just v) where
     PeerPort v = review _PeerPort v
 
@@ -331,6 +330,7 @@ _SamplingPriority = prism' ((SamplingPriorityKey,) . IntT . fromIntegral) $ \cas
     (k, IntT x) | k == SamplingPriorityKey -> Just . fromIntegral $ x
     _ -> Nothing
 
+pattern SamplingPriority :: Word8 -> Tag
 pattern SamplingPriority v <- (preview _SamplingPriority -> Just v) where
     SamplingPriority v = review _SamplingPriority v
 
@@ -339,6 +339,7 @@ _SpanKind = prism' ((SpanKindKey,) . StringT . spanKindLabel) $ \case
     (k, StringT x) | k == SpanKindKey -> fromSpanKindLabel x
     _ -> Nothing
 
+pattern SpanKind :: SpanKinds -> Tag
 pattern SpanKind v <- (preview _SpanKind -> Just v) where
     SpanKind = review _SpanKind
 
