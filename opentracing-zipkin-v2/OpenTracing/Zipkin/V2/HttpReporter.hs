@@ -95,7 +95,7 @@ newZipkin opts@ZipkinOptions{_zoEndpoint=endpoint, _zoErrorLog=errlog} = do
   where
     mkReq = do
         rq <- parseRequest endpoint
-        return rq { requestHeaders = [(hContentType, "application/json")] }
+        return rq { method = "POST", requestHeaders = [(hContentType, "application/json")] }
 
 closeZipkin :: Zipkin -> IO ()
 closeZipkin = closeBatchEnv . fromZipkin
