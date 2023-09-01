@@ -9,14 +9,12 @@ jobs:
       fail-fast: false
       matrix:
         versions:
-          # MSHV: three major versions
-          - ghc: '8.10.7'
-            cabal: '3.4'
-          - ghc: '9.2.7'
-            cabal: '3.6'
-          # Latest
-          - ghc: '9.4.5'
-            cabal: '3.10.1'
+          # Three stable versions
+          - ghc: '9.6.2'
+          - ghc: '9.4.7'
+          - ghc: '9.2.8'
+          # Latest as moving target
+          - ghc: 'latest'
     steps:
     - uses: actions/checkout@v2
 
@@ -24,7 +22,6 @@ jobs:
       uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.versions.ghc }}
-        cabal-version: ${{ matrix.versions.cabal }}
 
     - name: Cache cabal global package db
       id:   cabal-global
@@ -32,7 +29,7 @@ jobs:
       with:
         path: |
           ~/.cabal
-        key: ${{ runner.os }}-${{ matrix.versions.ghc }}-${{ matrix.versions.cabal }}-cabal-global-${{ hashFiles('cabal.project') }}
+        key: ${{ runner.os }}-${{ matrix.versions.ghc }}-cabal-global-${{ hashFiles('cabal.project') }}
 
     - name: Cache cabal work
       id:   cabal-local
@@ -40,7 +37,7 @@ jobs:
       with:
         path: |
           dist-newstyle
-        key: ${{ runner.os }}-${{ matrix.versions.ghc }}-${{ matrix.versions.cabal }}-cabal-local
+        key: ${{ runner.os }}-${{ matrix.versions.ghc }}-cabal-local
 
     - name: Install dependencies
       run: |
