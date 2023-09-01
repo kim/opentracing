@@ -36,7 +36,7 @@ library
     -Wnoncanonical-monad-instances
   build-depends:
       aeson >= 1.1
-    , base >= 4.9 && < 4.18
+    , base >= 4.9 && < 4.19
     , opentracing >= 0.1
     , text >= 1.2
   default-language: Haskell2010

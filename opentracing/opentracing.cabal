@@ -49,7 +49,7 @@ library
   build-depends:
       aeson >= 1.1
     , async >= 2.1
-    , base  >= 4.9 && < 4.18
+    , base  >= 4.9 && < 4.19
     , base64-bytestring >= 1.0
     , bytestring >= 0.10
     , case-insensitive >= 1.2

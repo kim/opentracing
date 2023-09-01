@@ -34,7 +34,7 @@ library
     -Wcompat
     -Wnoncanonical-monad-instances
   build-depends:
-      base >= 4.9 && < 4.18
+      base >= 4.9 && < 4.19
     , http-client >= 0.5
     , lens >= 4.19
     , mtl >= 2.2
