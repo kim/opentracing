@@ -1,3 +1,13 @@
+* 0.3.0 (2023-09-28)
+
+  - GHC 8.x is no longer tested, the minimum version is 9.2.8
+  - Various fixes the Jaeger backend
+  - Fix Zipkin backend to use POST (#49)
+  - Use a bounded queue for the batch reporter (#46)
+
+  This release is considered _breaking_ due to #46, and (potential)
+  incompatibility with older GHCs.
+
 * 0.2.2 (2022-05-09)
 
   Support for base 4.16 / GHC 9.2
