@@ -34,7 +34,7 @@ library
     -Wcompat
     -Wnoncanonical-monad-instances
   build-depends:
-      base >= 4.9 && < 4.19
+      base >= 4.9 && < 5
     , lens >= 4.19
     , opentracing >= 0.1
     , text >= 1.2
