@@ -68,10 +68,10 @@ import           Data.Text.Encoding      (decodeUtf8, encodeUtf8)
 import qualified Data.Text.Read          as Text
 import           Data.Vinyl
 import           Data.Word
-import           Network.HTTP.Types      (Header)
+import           Network.HTTP.Types      (Header, urlDecode)
 import           OpenTracing.Span
 import           OpenTracing.Types
-import           URI.ByteString          (urlDecodeQuery, urlEncodeQuery)
+import           URI.ByteString          (urlEncodeQuery)
 
 
 type TextMap = HashMap Text Text
@@ -229,4 +229,4 @@ _HeadersTextMap = iso toTextMap toHeaders
     toTextMap
         = HashMap.fromList
         . map (bimap (toLower . decodeUtf8 . CI.original)
-                     (decodeUtf8 . urlDecodeQuery))
+                     (decodeUtf8 . urlDecode True))
